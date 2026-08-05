@@ -35,7 +35,7 @@ s = p.read_text()
 old_mem = 'reg = <0 0x40000000 0 0x20000000>;'
 new_mem = 'reg = <0 0x40000000 0 0x80000000>;'
 old_ubi = 'reg = <0x0580000 0x7a80000>;'
-new_ubi = 'reg = <0x0580000 0 0x1fa80000>;'
+new_ubi = 'reg = <0x0580000 0x1fa80000>;'
 if s.count(old_mem) != 1:
     raise SystemExit(f'RAM pattern count != 1: {s.count(old_mem)}')
 if s.count(old_ubi) != 1:
