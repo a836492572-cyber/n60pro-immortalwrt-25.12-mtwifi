@@ -76,7 +76,15 @@ jobs:
         working-directory: source
         run: |
           make defconfig
-          grep -E 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro|CONFIG_PACKAGE_kmod-mt_wifi|CONFIG_PACKAGE_kmod-warp|CONFIG_PACKAGE_kmod-mediatek_hnat|CONFIG_PACKAGE_mtwifi-cfg-ucode' .config
+          grep -E 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro|CONFIG_PACKAGE_kmod-mt_wifi|CONFIG_PACKAGE_kmod-warp|CONFIG_PACKAGE_kmod-mediatek_hnat|CONFIG_PACKAGE_mtwifi-cfg=|CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661|CONFIG_MTK_FIRST_IF_IPAILNA|CONFIG_MTK_WHNAT_SUPPORT|CONFIG_MTK_WARP_V2' .config
+          grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' .config
+          grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' .config
+          grep -qx 'CONFIG_PACKAGE_kmod-warp=y' .config
+          grep -qx 'CONFIG_PACKAGE_kmod-mediatek_hnat=y' .config
+          grep -qx 'CONFIG_PACKAGE_mtwifi-cfg=y' .config
+          grep -qx 'CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y' .config
+          grep -qx 'CONFIG_MTK_FIRST_IF_IPAILNA=y' .config
+          ! grep -qx 'CONFIG_PACKAGE_mtwifi-cfg-ucode=y' .config
 
       - name: Download sources
         working-directory: source
