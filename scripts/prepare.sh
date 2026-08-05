@@ -24,11 +24,16 @@ done
 # Overlay it on the official target instead of replacing the official tree.
 rsync -a "$DONOR/target/linux/mediatek/" "$SOURCE/target/linux/mediatek/"
 
-# mt_wifi uses the legacy Wireless Extensions stream helpers. Official 25.12
-# disables WEXT in generic config, while the known-good MTK 6.12 donor enables
-# these four symbols. Enable only the compatibility symbols mt_wifi requires.
+# mt_wifi still relies on legacy Wireless Extensions. Linux 6.12 keeps the
+# implementation, but WIRELESS_EXT/WEXT_* are hidden Kconfig symbols upstream.
+# Import only the donor patch that makes them selectable, then enable them.
+WEXT_PATCH_SRC="$DONOR/target/linux/generic/hack-6.12/299-add-wext-kconfig.patch"
+WEXT_PATCH_DST="$SOURCE/target/linux/generic/hack-6.12/299-add-wext-kconfig.patch"
+test -f "$WEXT_PATCH_SRC"
+install -m0644 "$WEXT_PATCH_SRC" "$WEXT_PATCH_DST"
+
 GENERIC_CONFIG="$SOURCE/target/linux/generic/config-6.12"
-for sym in WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
+for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
   if grep -qx "# CONFIG_${sym} is not set" "$GENERIC_CONFIG"; then
     sed -i "s/^# CONFIG_${sym} is not set$/CONFIG_${sym}=y/" "$GENERIC_CONFIG"
   elif ! grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"; then
@@ -111,7 +116,8 @@ grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
 grep -q '^define KernelPackage/mediatek_hnat$' "$HNAT_DST"
 grep -q '^LUCI_DEPENDS:=+mtwifi-cfg$' "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
 grep -qx '# CONFIG_AIR_AN8811HB_PHY is not set' "$KERNEL_CONFIG"
-for sym in WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
+test -f "$WEXT_PATCH_DST"
+for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
   grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"
 done
 
