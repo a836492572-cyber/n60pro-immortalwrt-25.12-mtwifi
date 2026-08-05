@@ -64,7 +64,7 @@ jobs:
 
       - name: Apply MTK stack, 237 radio profile, 2G/512M layout
         run: |
-          ./scripts/prepare.sh "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/mtk-donor" "$GITHUB_WORKSPACE"
+          bash ./scripts/prepare.sh "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/mtk-donor" "$GITHUB_WORKSPACE"
 
       - name: Update feeds
         working-directory: source
