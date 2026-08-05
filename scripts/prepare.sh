@@ -29,7 +29,7 @@ rsync -a "$DONOR/target/linux/mediatek/" "$SOURCE/target/linux/mediatek/"
 HNAT_DST="$SOURCE/package/kernel/linux/modules/netdevices.mk"
 if ! grep -q '^define KernelPackage/mediatek_hnat$' "$HNAT_DST"; then
   tmp="$(mktemp)"
-  sed -n '/^define KernelPackage\/mediatek_hnat$/,/^$(eval $(call KernelPackage,mediatek_hnat))$/p' \
+  sed -n '/^define KernelPackage\/mediatek_hnat$/,/^\$(eval \$(call KernelPackage,mediatek_hnat))$/p' \
     "$DONOR/package/kernel/linux/modules/netdevices.mk" > "$tmp"
   test -s "$tmp"
   printf '\n' >> "$HNAT_DST"
