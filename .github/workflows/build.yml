@@ -85,9 +85,43 @@ jobs:
           find dl -type f -size -1024c -delete || true
 
       - name: Build firmware
+        id: build
         working-directory: source
+        shell: bash
         run: |
-          make -j"$(nproc)" || make -j1 V=s
+          set +e
+          make -j"$(nproc)" > "$GITHUB_WORKSPACE/build-parallel.log" 2>&1
+          rc=$?
+
+          if [ "$rc" -eq 0 ]; then
+            echo "Build completed successfully."
+            exit 0
+          fi
+
+          echo "Parallel build failed (rc=$rc); retrying with make -j1 V=s."
+          make -j1 V=s > "$GITHUB_WORKSPACE/build-verbose.log" 2>&1
+          rc=$?
+
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "===== MATCHED ERRORS ====="
+              grep -Ein 'error:|fatal:|undefined reference|No rule to make target|not found|failed|Error [0-9]+' "$GITHUB_WORKSPACE/build-verbose.log" | tail -n 250 || true
+              echo
+              echo "===== LAST 350 LINES ====="
+              tail -n 350 "$GITHUB_WORKSPACE/build-verbose.log" || true
+            } | tee "$GITHUB_WORKSPACE/build-error.log"
+          fi
+
+          exit "$rc"
+
+      - name: Upload compact build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-error-${{ github.run_number }}
+          path: build-error.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Collect firmware
         run: |
