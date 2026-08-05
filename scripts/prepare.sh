@@ -35,7 +35,7 @@ s = p.read_text()
 old_mem = 'reg = <0 0x40000000 0 0x20000000>;'
 new_mem = 'reg = <0 0x40000000 0 0x80000000>;'
 old_ubi = 'reg = <0x0580000 0x7a80000>;'
-new_ubi = 'reg = <0x0580000 0x1fa80000>;'
+new_ubi = 'reg = <0x0580000 0 0x1fa80000>;'
 if s.count(old_mem) != 1:
     raise SystemExit(f'RAM pattern count != 1: {s.count(old_mem)}')
 if s.count(old_ubi) != 1:
@@ -60,6 +60,13 @@ sed -i \
   "$SOURCE/.config"
 cat "$BUILDER/config/n60pro-extra.config" >> "$SOURCE/.config"
 
+# Linux 6.12 donor carries AN8801 support as a new Kconfig symbol. N60 Pro does
+# not use that PHY, so pin it off to keep GitHub Actions syncconfig noninteractive.
+KERNEL_CONFIG="$SOURCE/target/linux/mediatek/filogic/config-6.12"
+if ! grep -qx '# CONFIG_AIROHA_AN8801_PHY is not set' "$KERNEL_CONFIG"; then
+  echo '# CONFIG_AIROHA_AN8801_PHY is not set' >> "$KERNEL_CONFIG"
+fi
+
 # Guard rails: fail early if the 237 radio profile is not the expected one.
 for f in mt7986-ax6000.dbdc.b0.dat mt7986-ax6000.dbdc.b1.dat; do
   grep -qx 'CountryCode=CN' "$PROFILE_DIR/$f"
@@ -70,5 +77,6 @@ done
 
 grep -q 'reg = <0 0x40000000 0 0x80000000>;' "$DTS"
 grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
+grep -qx '# CONFIG_AIROHA_AN8801_PHY is not set' "$KERNEL_CONFIG"
 
 echo 'prepare: OK'
