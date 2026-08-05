@@ -22,7 +22,8 @@ jobs:
     timeout-minutes: 360
 
     env:
-      OFFICIAL_COMMIT: cd0a06bfd3fdbc1011e32d35348d2ee013b4daf2
+      # Exact signed ImmortalWrt v25.12.1 release commit.
+      OFFICIAL_COMMIT: a3378d1a2c15beb2faf4b0bce9c00f07143efa29
       MTK_COMMIT: eb724bb94de346f36b35bdb0f7de31b529bbc885
       RADIO_COMMIT: ec9ef10efc65da1e6d1de4e2c043c0e13d08eed8
       TZ: Asia/Tokyo
@@ -55,6 +56,8 @@ jobs:
           cd source
           git fetch --depth=1 origin "$OFFICIAL_COMMIT"
           git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$OFFICIAL_COMMIT"
+          grep -q '25.12.1' include/version.mk
           cd ..
           git clone --filter=blob:none https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git mtk-donor
           cd mtk-donor
@@ -123,6 +126,18 @@ jobs:
 
           exit "$rc"
 
+      - name: Collect firmware
+        run: |
+          mkdir -p artifact
+          find source/bin/targets/mediatek/filogic -maxdepth 1 -type f \
+            \( -name '*netcore_n60-pro*squashfs-sysupgrade.itb' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
+            -exec cp -v {} artifact/ \;
+          test -n "$(find artifact -type f -name '*netcore_n60-pro*squashfs-sysupgrade.itb' -print -quit)"
+          grep -q '25.12.1' artifact/profiles.json
+          ! grep -q '25.12-SNAPSHOT' artifact/profiles.json
+          cd artifact
+          sha256sum * > BUILD-SHA256SUMS
+
       - name: Upload compact build diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -131,16 +146,6 @@ jobs:
           path: build-error.log
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Collect firmware
-        run: |
-          mkdir -p artifact
-          find source/bin/targets/mediatek/filogic -maxdepth 1 -type f \
-            \( -name '*netcore_n60-pro*squashfs-sysupgrade.itb' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
-            -exec cp -v {} artifact/ \;
-          test -n "$(find artifact -type f -name '*netcore_n60-pro*squashfs-sysupgrade.itb' -print -quit)"
-          cd artifact
-          sha256sum * > BUILD-SHA256SUMS
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
