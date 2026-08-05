@@ -1,0 +1,1 @@
+# n60pro-immortalwrt-25.12-mtwifi
