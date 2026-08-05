@@ -24,6 +24,18 @@ done
 # Overlay it on the official target instead of replacing the official tree.
 rsync -a "$DONOR/target/linux/mediatek/" "$SOURCE/target/linux/mediatek/"
 
+# mt_wifi uses the legacy Wireless Extensions stream helpers. Official 25.12
+# disables WEXT in generic config, while the known-good MTK 6.12 donor enables
+# these four symbols. Enable only the compatibility symbols mt_wifi requires.
+GENERIC_CONFIG="$SOURCE/target/linux/generic/config-6.12"
+for sym in WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
+  if grep -qx "# CONFIG_${sym} is not set" "$GENERIC_CONFIG"; then
+    sed -i "s/^# CONFIG_${sym} is not set$/CONFIG_${sym}=y/" "$GENERIC_CONFIG"
+  elif ! grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"; then
+    echo "CONFIG_${sym}=y" >> "$GENERIC_CONFIG"
+  fi
+done
+
 # kmod-mediatek_hnat is defined by the donor in the generic kernel modules file,
 # not under package/mtk. Import only that single KernelPackage stanza.
 HNAT_DST="$SOURCE/package/kernel/linux/modules/netdevices.mk"
@@ -99,5 +111,8 @@ grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
 grep -q '^define KernelPackage/mediatek_hnat$' "$HNAT_DST"
 grep -q '^LUCI_DEPENDS:=+mtwifi-cfg$' "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
 grep -qx '# CONFIG_AIR_AN8811HB_PHY is not set' "$KERNEL_CONFIG"
+for sym in WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
+  grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"
+done
 
 echo 'prepare: OK'
