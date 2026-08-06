@@ -6,12 +6,13 @@ DONOR="${2:?usage: prepare.sh <official-source> <mtk-donor> <builder-root>}"
 BUILDER="${3:?usage: prepare.sh <official-source> <mtk-donor> <builder-root>}"
 
 # Keep the official ImmortalWrt tree as the base. Import only the MTK packages
-# required by the proprietary N60 Pro Wi-Fi path.
+# required by the proprietary N60 Pro Wi-Fi path. WARP/HNAT is intentionally
+# excluded: 237 RF power does not require it, and it touches the Ethernet/PPE
+# path that must stay identical to official N60 Pro.
 rm -rf "$SOURCE/package/mtk"
 for rel in \
   drivers/conninfra \
   drivers/mt_wifi \
-  drivers/warp \
   drivers/wifi-profile \
   applications/datconf \
   applications/mtwifi-cfg \
@@ -19,6 +20,32 @@ for rel in \
   mkdir -p "$SOURCE/package/mtk/$(dirname "$rel")"
   rsync -a "$DONOR/package/mtk/$rel/" "$SOURCE/package/mtk/$rel/"
 done
+
+# The donor mt_wifi package hard-depends on its legacy WARP/HNAT acceleration
+# stack even though the driver itself supports running without WHNAT/WARP.
+# Remove only those package/build/install dependencies; CONFIG_MTK_WHNAT_SUPPORT,
+# CONFIG_MTK_WARP_V2 and CONFIG_MTK_FAST_NAT_SUPPORT stay disabled in our config.
+MT_WIFI_MAKEFILE="$SOURCE/package/mtk/drivers/mt_wifi/Makefile"
+python3 - "$MT_WIFI_MAKEFILE" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+replacements = [
+    ("PKG_BUILD_DEPENDS:=warp\n", ""),
+    ("  DEPENDS:=+wifi-dats +kmod-conninfra +kmod-mediatek_hnat +kmod-warp\n",
+     "  DEPENDS:=+wifi-dats +kmod-conninfra\n"),
+    ("  FILES:=$(PKG_BUILD_DIR)/mt_wifi_ap/mt_wifi.ko \\\n\t$(PKG_BUILD_DIR)/mt_wifi/embedded/plug_in/warp_proxy/mtk_warp_proxy.ko\n",
+     "  FILES:=$(PKG_BUILD_DIR)/mt_wifi_ap/mt_wifi.ko\n"),
+    ("  AUTOLOAD:=$(call AutoProbe,mt_wifi mtk_warp_proxy)\n",
+     "  AUTOLOAD:=$(call AutoProbe,mt_wifi)\n"),
+]
+for old, new in replacements:
+    if s.count(old) != 1:
+        raise SystemExit(f'mt_wifi Makefile pattern count != 1: {old!r}: {s.count(old)}')
+    s = s.replace(old, new, 1)
+p.write_text(s)
+PY
 
 # IMPORTANT: keep target/linux/mediatek from the official 25.12.1 release.
 # The previous whole-tree donor overlay built successfully but the flashed image
@@ -64,19 +91,6 @@ for patch in \
   test -f "$src"
   install -m0644 "$src" "$dst"
 done
-
-# kmod-mediatek_hnat is defined by the donor in the generic kernel modules file,
-# not under package/mtk. Import only that single KernelPackage stanza.
-HNAT_DST="$SOURCE/package/kernel/linux/modules/netdevices.mk"
-if ! grep -q '^define KernelPackage/mediatek_hnat$' "$HNAT_DST"; then
-  tmp="$(mktemp)"
-  sed -n '/^define KernelPackage\/mediatek_hnat$/,/^\$(eval \$(call KernelPackage,mediatek_hnat))$/p' \
-    "$DONOR/package/kernel/linux/modules/netdevices.mk" > "$tmp"
-  test -s "$tmp"
-  printf '\n' >> "$HNAT_DST"
-  cat "$tmp" >> "$HNAT_DST"
-  rm -f "$tmp"
-fi
 
 # Use the classic Lua mtwifi-cfg used by the running 237 firmware. The donor's
 # LuCI package defaults to the ucode frontend, so point it at mtwifi-cfg instead.
@@ -135,7 +149,6 @@ done
 grep -q 'led@3' "$DTS"
 grep -q 'reg = <0 0x40000000 0 0x80000000>;' "$DTS"
 grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
-grep -q '^define KernelPackage/mediatek_hnat$' "$HNAT_DST"
 grep -q '^LUCI_DEPENDS:=+mtwifi-cfg$' "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
 test -f "$WEXT_PATCH_DST"
 test -f "$WIFI_UTILITY_DST/mt_wifi_mtd.c"
@@ -144,5 +157,10 @@ grep -q 'EXPORT_SYMBOL(mt_eeprom_read_wifi);' \
 for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
   grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"
 done
+! test -d "$SOURCE/package/mtk/drivers/warp"
+! grep -q '^PKG_BUILD_DEPENDS:=warp$' "$MT_WIFI_MAKEFILE"
+! grep -q 'kmod-mediatek_hnat' "$MT_WIFI_MAKEFILE"
+! grep -q 'kmod-warp' "$MT_WIFI_MAKEFILE"
+! grep -q 'mtk_warp_proxy\.ko' "$MT_WIFI_MAKEFILE"
 
 echo 'prepare: OK'
