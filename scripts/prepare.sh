@@ -44,6 +44,27 @@ for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
   fi
 done
 
+# conninfra/mt_wifi use MediaTek's in-kernel wifi_utility API for EEPROM access
+# and RBUS glue. Keep the official MediaTek target intact: import only this small
+# donor utility directory plus the three Linux 6.12 patches that build/fix it and
+# export mt_eeprom_read_wifi()/mt_eeprom_write_wifi().
+WIFI_UTILITY_SRC="$DONOR/target/linux/mediatek/files-6.12/drivers/net/wireless/wifi_utility"
+WIFI_UTILITY_DST="$SOURCE/target/linux/mediatek/files-6.12/drivers/net/wireless/wifi_utility"
+test -d "$WIFI_UTILITY_SRC"
+mkdir -p "$(dirname "$WIFI_UTILITY_DST")"
+rm -rf "$WIFI_UTILITY_DST"
+rsync -a "$WIFI_UTILITY_SRC/" "$WIFI_UTILITY_DST/"
+
+for patch in \
+  999-zzz-5200-mtk-add-wifi-utility-rbus.patch \
+  999-zzz-5202-mtk-wifi_utility-since-v6.11-fix-rbus_remove-return-type.patch \
+  999-zzz-5203-mtk-wifi_utility-add-universal-eeprom-read-write-backend.patch; do
+  src="$DONOR/target/linux/mediatek/patches-6.12/$patch"
+  dst="$SOURCE/target/linux/mediatek/patches-6.12/$patch"
+  test -f "$src"
+  install -m0644 "$src" "$dst"
+done
+
 # kmod-mediatek_hnat is defined by the donor in the generic kernel modules file,
 # not under package/mtk. Import only that single KernelPackage stanza.
 HNAT_DST="$SOURCE/package/kernel/linux/modules/netdevices.mk"
@@ -117,6 +138,9 @@ grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
 grep -q '^define KernelPackage/mediatek_hnat$' "$HNAT_DST"
 grep -q '^LUCI_DEPENDS:=+mtwifi-cfg$' "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
 test -f "$WEXT_PATCH_DST"
+test -f "$WIFI_UTILITY_DST/mt_wifi_mtd.c"
+grep -q 'EXPORT_SYMBOL(mt_eeprom_read_wifi);' \
+  "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5203-mtk-wifi_utility-add-universal-eeprom-read-write-backend.patch"
 for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
   grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"
 done
