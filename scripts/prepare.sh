@@ -20,9 +20,12 @@ for rel in \
   rsync -a "$DONOR/package/mtk/$rel/" "$SOURCE/package/mtk/$rel/"
 done
 
-# MTK proprietary WARP/HNAT needs the donor's Linux 6.12 MediaTek integration.
-# Overlay it on the official target instead of replacing the official tree.
-rsync -a "$DONOR/target/linux/mediatek/" "$SOURCE/target/linux/mediatek/"
+# IMPORTANT: keep target/linux/mediatek from the official 25.12.1 release.
+# The previous whole-tree donor overlay built successfully but the flashed image
+# had no working LAN, while the official 25.12.1 N60 Pro initramfs had working
+# DHCP/LAN on the same hardware. Therefore donor target files must not replace
+# the official N60 Pro Ethernet/DSA/PHY/kernel integration. Add only compatibility
+# pieces that are proven necessary below.
 
 # mt_wifi still relies on legacy Wireless Extensions. Linux 6.12 keeps the
 # implementation, but WIRELESS_EXT/WEXT_* are hidden Kconfig symbols upstream.
@@ -74,6 +77,7 @@ for f in \
 done
 
 # N60 Pro hard-mod: 2 GiB RAM and WildEdition 512 MiB MAX NAND layout.
+# This edits the official 25.12.1 N60 Pro DTS, not the donor DTS.
 DTS="$SOURCE/target/linux/mediatek/dts/mt7986a-netcore-n60-pro.dts"
 python3 - "$DTS" <<'PY'
 from pathlib import Path
@@ -95,14 +99,6 @@ PY
 # Start from a minimal N60 Pro config, never from the donor AX6000 defconfig.
 cp "$BUILDER/config/n60pro-extra.config" "$SOURCE/.config"
 
-# Pin unrelated donor PHY options off so kernel syncconfig stays noninteractive.
-KERNEL_CONFIG="$SOURCE/target/linux/mediatek/filogic/config-6.12"
-for sym in AIROHA_AN8801_PHY AIR_AN8811HB_PHY; do
-  if ! grep -qx "# CONFIG_${sym} is not set" "$KERNEL_CONFIG"; then
-    echo "# CONFIG_${sym} is not set" >> "$KERNEL_CONFIG"
-  fi
-done
-
 # Guard rails: exact 237 high-power profile behavior requested for this build.
 for f in mt7986-ax6000.dbdc.b0.dat mt7986-ax6000.dbdc.b1.dat; do
   grep -qx 'CountryCode=CN' "$PROFILE_DIR/$f"
@@ -111,11 +107,15 @@ for f in mt7986-ax6000.dbdc.b0.dat mt7986-ax6000.dbdc.b1.dat; do
   grep -qx 'TxPower=100' "$PROFILE_DIR/$f"
 done
 
+# Official N60 Pro DTS fingerprint: the release DTS uses LED child nodes for the
+# MaxLinear PHYs; the donor DTS replaces these with mxl,led-config. Refuse to
+# build if the donor N60 Pro DTS has accidentally been overlaid again.
+! grep -q 'mxl,led-config' "$DTS"
+grep -q 'led@3' "$DTS"
 grep -q 'reg = <0 0x40000000 0 0x80000000>;' "$DTS"
 grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
 grep -q '^define KernelPackage/mediatek_hnat$' "$HNAT_DST"
 grep -q '^LUCI_DEPENDS:=+mtwifi-cfg$' "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
-grep -qx '# CONFIG_AIR_AN8811HB_PHY is not set' "$KERNEL_CONFIG"
 test -f "$WEXT_PATCH_DST"
 for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
   grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"
