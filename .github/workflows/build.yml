@@ -70,6 +70,18 @@ jobs:
           bash ./scripts/prepare.sh "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/mtk-donor" "$GITHUB_WORKSPACE"
           bash ./scripts/fix-wifi-utility-module.sh "$GITHUB_WORKSPACE/source"
 
+      - name: Disable proprietary WiFi boot autoload for diagnostic 26
+        run: |
+          # Keep all three proprietary modules and 237 radio data in the image,
+          # but do not create /etc/modules.d boot-autoload entries. This changes
+          # only module startup, not kernel/DTS/rootfs contents or module binaries.
+          sed -i '/AUTOLOAD:=.*mt_wifi/d' source/package/mtk/drivers/mt_wifi/Makefile
+          sed -i '/AUTOLOAD:=.*conninfra/d' source/package/mtk/drivers/conninfra/Makefile
+          sed -i '/AUTOLOAD:=.*mtk_wifi_utility/d' source/package/mtk/drivers/wifi_utility/Makefile
+          ! grep -q 'AUTOLOAD:=.*mt_wifi' source/package/mtk/drivers/mt_wifi/Makefile
+          ! grep -q 'AUTOLOAD:=.*conninfra' source/package/mtk/drivers/conninfra/Makefile
+          ! grep -q 'AUTOLOAD:=.*mtk_wifi_utility' source/package/mtk/drivers/wifi_utility/Makefile
+
       - name: Update feeds
         working-directory: source
         run: |
@@ -154,7 +166,7 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: N60Pro-ImmortalWrt-25.12.1-MTWiFi-237-512M-2G
+          name: N60Pro-ImmortalWrt-25.12.1-MTWiFi-237-512M-2G-NOAUTOLOAD-DIAG
           path: artifact/*
           if-no-files-found: error
           retention-days: 14
