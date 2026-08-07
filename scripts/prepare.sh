@@ -123,11 +123,127 @@ old_mem = 'reg = <0 0x40000000 0 0x20000000>;'
 new_mem = 'reg = <0 0x40000000 0 0x80000000>;'
 old_ubi = 'reg = <0x0580000 0x7a80000>;'
 new_ubi = 'reg = <0x0580000 0x1fa80000>;'
+old_chosen = '''chosen {
+\t\tbootargs = "root=/dev/fit0 rootwait";
+\t\trootdisk = <&ubi_rootdisk>;
+\t\tstdout-path = "serial0:115200n8";
+\t};'''
+new_chosen = '''chosen {
+\t\tstdout-path = "serial0:115200n8";
+\t};'''
+old_fit_volume = '''
+\t\t\t\tvolumes {
+\t\t\t\t\tubi_rootdisk: ubi-volume-fit {
+\t\t\t\t\t\tvolname = "fit";
+\t\t\t\t\t};
+\t\t\t\t};
+'''
 if s.count(old_mem) != 1:
     raise SystemExit(f'RAM pattern count != 1: {s.count(old_mem)}')
 if s.count(old_ubi) != 1:
     raise SystemExit(f'UBI pattern count != 1: {s.count(old_ubi)}')
-s = s.replace(old_mem, new_mem, 1).replace(old_ubi, new_ubi, 1)
+if s.count(old_chosen) != 1:
+    raise SystemExit(f'chosen fit0 pattern count != 1: {s.count(old_chosen)}')
+if s.count(old_fit_volume) != 1:
+    raise SystemExit(f'ubi fit volume pattern count != 1: {s.count(old_fit_volume)}')
+s = (
+    s.replace(old_mem, new_mem, 1)
+     .replace(old_ubi, new_ubi, 1)
+     .replace(old_chosen, new_chosen, 1)
+     .replace(old_fit_volume, '\n', 1)
+)
+p.write_text(s)
+PY
+
+# Switch only N60 Pro from the official fit0/rootdisk sysupgrade.itb path to the
+# classic NAND sysupgrade tar/bin path used by the proven bootable N60 Pro line.
+FILOGIC_MK="$SOURCE/target/linux/mediatek/image/filogic.mk"
+python3 - "$FILOGIC_MK" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+old = '''define Device/netcore_n60-pro
+  DEVICE_VENDOR := Netcore
+  DEVICE_MODEL := N60 Pro
+  DEVICE_DTS := mt7986a-netcore-n60-pro
+  DEVICE_DTS_DIR := ../dts
+  UBINIZE_OPTS := -E 5
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  KERNEL_IN_UBI := 1
+  UBOOTENV_IN_UBI := 1
+  IMAGES := sysupgrade.itb
+  KERNEL_INITRAMFS_SUFFIX := -recovery.itb
+  KERNEL := kernel-bin | gzip
+  KERNEL_INITRAMFS := kernel-bin | lzma | \\
+\tfit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 64k
+  IMAGE/sysupgrade.itb := append-kernel | \\
+\tfit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | append-metadata
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7986-firmware mt7986-wo-firmware kmod-usb3 automount
+  ARTIFACTS := preloader.bin bl31-uboot.fip
+  ARTIFACT/preloader.bin := mt7986-bl2 spim-nand-ddr4
+  ARTIFACT/bl31-uboot.fip := mt7986-bl31-uboot netcore_n60-pro
+endef'''
+new = '''define Device/netcore_n60-pro
+  DEVICE_VENDOR := Netcore
+  DEVICE_MODEL := N60 Pro
+  DEVICE_DTS := mt7986a-netcore-n60-pro
+  DEVICE_DTS_DIR := ../dts
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  IMAGES := sysupgrade.bin
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7986-firmware mt7986-wo-firmware kmod-usb3 automount
+endef'''
+if s.count(old) != 1:
+    raise SystemExit(f'N60 Pro official ITB image block count != 1: {s.count(old)}')
+s = s.replace(old, new, 1)
+p.write_text(s)
+PY
+
+PLATFORM_SH="$SOURCE/target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh"
+python3 - "$PLATFORM_SH" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+old_upgrade = '''\topenwrt,one|\\
+\tnetcore,n60|\\
+\tnetcore,n60-pro|\\
+\tqihoo,360t7|\\'''
+new_upgrade = '''\topenwrt,one|\\
+\tnetcore,n60|\\
+\tqihoo,360t7|\\'''
+classic_case = '''\tnetcore,n60-pro)
+\t\tnand_do_upgrade "$1"
+\t\t;;
+'''
+old_check = '''\topenwrt,one|\\
+\tnetcore,n60|\\
+\tnetcore,n60-pro|\\
+\tqihoo,360t7|\\'''
+new_check = '''\topenwrt,one|\\
+\tnetcore,n60|\\
+\tqihoo,360t7|\\'''
+old_tar_check = '''\tcreatlentem,clt-r30b1|\\
+\tcreatlentem,clt-r30b1-112m|\\
+\tnradio,c8-668gl)'''
+new_tar_check = '''\tnetcore,n60-pro|\\
+\tcreatlentem,clt-r30b1|\\
+\tcreatlentem,clt-r30b1-112m|\\
+\tnradio,c8-668gl)'''
+if s.count(old_upgrade) != 2:
+    raise SystemExit(f'N60 Pro FIT case pattern count != 2: {s.count(old_upgrade)}')
+if s.count(old_tar_check) != 1:
+    raise SystemExit(f'classic tar check anchor count != 1: {s.count(old_tar_check)}')
+s = s.replace(old_upgrade, new_upgrade, 1)
+insert_before = new_upgrade
+if s.count(insert_before) < 1:
+    raise SystemExit('FIT upgrade case insertion anchor missing')
+s = s.replace(insert_before, classic_case + insert_before, 1)
+s = s.replace(old_check, new_check, 1)
+s = s.replace(old_tar_check, new_tar_check, 1)
 p.write_text(s)
 PY
 
@@ -149,6 +265,18 @@ done
 grep -q 'led@3' "$DTS"
 grep -q 'reg = <0 0x40000000 0 0x80000000>;' "$DTS"
 grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
+! grep -q 'root=/dev/fit0' "$DTS"
+! grep -q 'rootdisk' "$DTS"
+! grep -q 'ubi-volume-fit' "$DTS"
+! grep -q 'volname = "fit"' "$DTS"
+grep -A12 '^define Device/netcore_n60-pro$' "$FILOGIC_MK" | grep -q '^  IMAGES := sysupgrade.bin$'
+grep -A12 '^define Device/netcore_n60-pro$' "$FILOGIC_MK" | grep -q '^  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata$'
+! grep -A20 '^define Device/netcore_n60-pro$' "$FILOGIC_MK" | grep -q 'sysupgrade.itb'
+! grep -A20 '^define Device/netcore_n60-pro$' "$FILOGIC_MK" | grep -q 'KERNEL_IN_UBI'
+grep -A4 $'^\tnetcore,n60-pro)' "$PLATFORM_SH" | grep -q 'nand_do_upgrade "$1"'
+! grep -B60 -A2 'fit_do_upgrade "$1"' "$PLATFORM_SH" | grep -q $'\tnetcore,n60-pro'
+! grep -B60 -A2 'fit_check_image "$1"' "$PLATFORM_SH" | grep -q $'\tnetcore,n60-pro'
+grep -A8 $'^\tnetcore,n60-pro|\\\\' "$PLATFORM_SH" | grep -q 'magic="$(dd if="$1" bs=1 skip=257 count=5'
 grep -q '^LUCI_DEPENDS:=+mtwifi-cfg$' "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
 test -f "$WEXT_PATCH_DST"
 test -f "$WIFI_UTILITY_DST/mt_wifi_mtd.c"

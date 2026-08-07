@@ -1,0 +1,11 @@
+source/
+mtk-donor/
+artifact/
+build-*.log
+*.bin
+*.itb
+*.img
+*.ubi
+*.zip
+*.rar
+*.7z
