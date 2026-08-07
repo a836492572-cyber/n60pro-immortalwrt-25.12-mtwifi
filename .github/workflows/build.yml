@@ -69,12 +69,13 @@ jobs:
         run: |
           bash ./scripts/prepare.sh "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/mtk-donor" "$GITHUB_WORKSPACE"
           bash ./scripts/fix-wifi-utility-module.sh "$GITHUB_WORKSPACE/source"
+          bash ./scripts/rebase-official-release-config.sh "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE"
 
-      - name: Disable proprietary WiFi boot autoload for diagnostic 26
+      - name: Keep proprietary WiFi installed but not autoloaded for diagnostic 27
         run: |
-          # Keep all three proprietary modules and 237 radio data in the image,
-          # but do not create /etc/modules.d boot-autoload entries. This changes
-          # only module startup, not kernel/DTS/rootfs contents or module binaries.
+          # Build 27 tests the official release kernel baseline first. Keep the
+          # complete proprietary Wi-Fi stack in rootfs for later manual modprobe,
+          # but do not let boot-time module order affect the LAN result.
           sed -i '/AUTOLOAD:=.*mt_wifi/d' source/package/mtk/drivers/mt_wifi/Makefile
           sed -i '/AUTOLOAD:=.*conninfra/d' source/package/mtk/drivers/conninfra/Makefile
           sed -i '/AUTOLOAD:=.*mtk_wifi_utility/d' source/package/mtk/drivers/wifi_utility/Makefile
@@ -92,9 +93,11 @@ jobs:
         working-directory: source
         run: |
           make defconfig
-          grep -E 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro|CONFIG_PACKAGE_kmod-mt_wifi|CONFIG_PACKAGE_mtwifi-cfg=|CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673|CONFIG_MTK_MT_WIFI_MT7986_20260601|CONFIG_MTK_FIRST_IF_IPAILNA|CONFIG_MTK_FAST_NAT_SUPPORT|CONFIG_MTK_WHNAT_SUPPORT|CONFIG_MTK_WARP_V2' .config || true
+          git diff --exit-code -- target/linux/generic/config-6.12
+          grep -E 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro|CONFIG_PACKAGE_kmod-mt_wifi|CONFIG_PACKAGE_mtwifi-cfg=|CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673|CONFIG_MTK_MT_WIFI_MT7986_20260601|CONFIG_MTK_FIRST_IF_IPAILNA|CONFIG_MTK_FAST_NAT_SUPPORT|CONFIG_MTK_WHNAT_SUPPORT|CONFIG_MTK_WARP_V2|CONFIG_ALL_KMODS' .config || true
           grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' .config
           grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' .config
+          grep -qx 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' .config
           grep -qx 'CONFIG_PACKAGE_mtwifi-cfg=y' .config
           grep -qx 'CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y' .config
           grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_20260601=y' .config
@@ -166,7 +169,7 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: N60Pro-ImmortalWrt-25.12.1-MTWiFi-237-512M-2G-NOAUTOLOAD-DIAG
+          name: N60Pro-25.12.1-OFFICIAL-KERNEL-MTWiFi-237-NOAUTOLOAD-DIAG
           path: artifact/*
           if-no-files-found: error
           retention-days: 14
