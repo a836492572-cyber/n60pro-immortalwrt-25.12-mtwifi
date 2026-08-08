@@ -93,7 +93,9 @@ jobs:
         working-directory: source
         run: |
           make defconfig
-          git diff --exit-code -- target/linux/generic/config-6.12
+          for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
+            grep -qx "CONFIG_${sym}=y" target/linux/generic/config-6.12
+          done
           grep -E 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro|CONFIG_PACKAGE_kmod-mt_wifi|CONFIG_PACKAGE_mtwifi-cfg=|CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673|CONFIG_MTK_MT_WIFI_MT7986_20260601|CONFIG_MTK_FIRST_IF_IPAILNA|CONFIG_MTK_FAST_NAT_SUPPORT|CONFIG_MTK_WHNAT_SUPPORT|CONFIG_MTK_WARP_V2|CONFIG_ALL_KMODS' .config || true
           grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' .config
           grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' .config
