@@ -1,0 +1,95 @@
+# N60 Pro Build Gate
+
+This gate is mandatory before any push that can trigger the long GitHub Actions firmware build.
+
+## Purpose
+The goal is to minimize Codex quota and multi-hour full-build iterations by moving every reasonable check before the integration build.
+
+## Gate A — evidence and scope
+- [ ] The current failure domain/root cause is supported by logs, source, or a reproducible static fact; it is not a guess.
+- [ ] Existing project history and disproved theories in `docs/CODEX_CONTEXT.md` were reused instead of re-investigated blindly.
+- [ ] The whole relevant failure chain was audited for other cheap/static problems that can be fixed in the same batch.
+- [ ] The batch contains only related, evidence-backed changes; unrelated DTS/network/storage/Wi-Fi/workflow changes are not mixed in.
+
+## Gate B — immutable project baseline
+- [ ] Official ImmortalWrt 25.12.1 commit is `a3378d1a2c15beb2faf4b0bce9c00f07143efa29`.
+- [ ] Kernel baseline is official Linux 6.12 from that release.
+- [ ] Official N60 Pro Ethernet / PHY / DSA / switch/platform networking remains authoritative.
+- [ ] No donor whole `target/linux/mediatek/` overlay/import exists.
+- [ ] BL2/FIP/U-Boot/bootloader partitions are untouched.
+- [ ] Hardware target remains MT7986A, 2 GiB DDR4, 512 MiB SPI-NAND.
+- [ ] Intended UBI/firmware area remains `0x0580000` + `0x1fa80000` unless the user explicitly changes it.
+
+## Gate C — proprietary 237 Wi-Fi invariants
+Required selections remain true:
+
+```text
+CONFIG_MTK_CHIP_MT7986=y
+CONFIG_MTK_FIRST_IF_EEPROM_FLASH=y
+CONFIG_MTK_FIRST_IF_IPAILNA=y
+CONFIG_MTK_FIRST_IF_MT7986=y
+CONFIG_MTK_WIFI_ADIE_TYPE="mt7976"
+CONFIG_MTK_WIFI_SKU_TYPE="AX6000"
+CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y
+CONFIG_MTK_MT_WIFI_MT7986_20260601=y
+```
+
+Required RF profile files remain present:
+- `l1profile.dat`
+- `mt7986-ax6000.dbdc.b0.dat`
+- `mt7986-ax6000.dbdc.b1.dat`
+- `mt7986-sku.dat`
+- `mt7986-sku-bf.dat`
+
+Required RF behavior remains:
+- `CountryCode=CN`
+- `E2pAccessMode=2`
+- `SKUenable=0`
+- `TxPower=100`
+- iPA/iLNA
+
+## Gate D — Linux 6.12 compatibility invariants
+Only the required WEXT compatibility delta is allowed unless explicitly approved:
+
+```text
+CONFIG_WIRELESS_EXT=y
+CONFIG_WEXT_CORE=y
+CONFIG_WEXT_PRIV=y
+CONFIG_WEXT_PROC=y
+CONFIG_WEXT_SPY=y
+```
+
+- [ ] `wifi_utility -> conninfra -> mt_wifi` package/module dependency chain is internally consistent.
+- [ ] Known EEPROM symbol requirements are satisfied.
+- [ ] No known unresolved modpost/link/kernel-symbol error remains in the changed failure domain.
+- [ ] WARP/HNAT/WHNAT/Fast-NAT remain disabled.
+- [ ] During the current diagnostic phase, `mtk_wifi_utility`, `conninfra`, and `mt_wifi` are installed but not auto-loaded.
+
+## Gate E — cheap validation completed
+Run only checks relevant to the change, but do every applicable cheap check before the full build:
+- [ ] `git status --short` checked before work.
+- [ ] Changed shell scripts pass `bash -n`.
+- [ ] Patch/application steps have been checked for clean application where practical.
+- [ ] Relevant Kconfig/Makefile/package dependency facts were checked.
+- [ ] Resulting `.config` / `defconfig` critical symbols were checked when config is affected.
+- [ ] Relevant targeted package/module/compile check was run if it is materially cheaper than a full firmware build and feasible.
+- [ ] Full local firmware build was NOT used as the default validation step.
+- [ ] Complete `git diff` was reviewed and contains only intended changes.
+
+## Gate F — ChatGPT review
+Before a build-triggering push:
+- [ ] ChatGPT reviewed the root cause, change set, diff scope, and cheap-validation results.
+- [ ] No obvious known failure remains that would make a long build predictably wasteful.
+- [ ] ChatGPT explicitly considers the batch ready for one integration build.
+
+If any applicable item is failed or unknown, do not push just to test a guess.
+
+## GitHub Actions rule
+The full GitHub Actions firmware build is only the final integration proof for a pre-validated batch.
+If it fails:
+1. preserve/download the full failure log;
+2. locate the first real unignored terminating error and associated package/target;
+3. analyze the entire relevant failure domain before the next edit;
+4. do not immediately start another full build.
+
+If it succeeds, inspect the produced buildinfo/profile/image/hash evidence before real-device flashing.
