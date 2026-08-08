@@ -135,12 +135,13 @@ jobs:
 
           if [ "$rc" -ne 0 ]; then
             {
-              echo "===== MATCHED ERRORS ====="
-              grep -Ein 'error:|fatal:|undefined reference|No rule to make target|not found|failed|Error [0-9]+' "$GITHUB_WORKSPACE/build-parallel.log" | tail -n 300 || true
+              echo "===== ERROR CONTEXT ====="
+              grep -Ein -B 20 -A 20 'make\[[0-9]+\]: \*\*\*|error:|fatal:|undefined reference|modpost:|No rule to make target|Error [0-9]+' "$GITHUB_WORKSPACE/build-parallel.log" | tail -n 2500 || true
               echo
               echo "===== LAST 500 LINES ====="
               tail -n 500 "$GITHUB_WORKSPACE/build-parallel.log" || true
             } | tee "$GITHUB_WORKSPACE/build-error.log"
+            gzip -9 -c "$GITHUB_WORKSPACE/build-parallel.log" > "$GITHUB_WORKSPACE/build-parallel.log.gz"
           else
             echo "Build completed successfully."
           fi
@@ -159,12 +160,14 @@ jobs:
           cd artifact
           sha256sum * > BUILD-SHA256SUMS
 
-      - name: Upload compact build diagnostics
+      - name: Upload build diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-error-${{ github.run_number }}
-          path: build-error.log
+          path: |
+            build-error.log
+            build-parallel.log.gz
           if-no-files-found: ignore
           retention-days: 7
 
