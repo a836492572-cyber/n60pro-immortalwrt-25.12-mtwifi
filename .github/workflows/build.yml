@@ -22,7 +22,6 @@ jobs:
     timeout-minutes: 360
 
     env:
-      # Exact signed ImmortalWrt v25.12.1 release commit.
       OFFICIAL_COMMIT: a3378d1a2c15beb2faf4b0bce9c00f07143efa29
       MTK_COMMIT: eb724bb94de346f36b35bdb0f7de31b529bbc885
       RADIO_COMMIT: ec9ef10efc65da1e6d1de4e2c043c0e13d08eed8
@@ -73,9 +72,6 @@ jobs:
 
       - name: Keep proprietary WiFi installed but not autoloaded for diagnostic 27
         run: |
-          # Build 27 tests the official release kernel baseline first. Keep the
-          # complete proprietary Wi-Fi stack in rootfs for later manual modprobe,
-          # but do not let boot-time module order affect the LAN result.
           sed -i '/AUTOLOAD:=.*mt_wifi/d' source/package/mtk/drivers/mt_wifi/Makefile
           sed -i '/AUTOLOAD:=.*conninfra/d' source/package/mtk/drivers/conninfra/Makefile
           sed -i '/AUTOLOAD:=.*mtk_wifi_utility/d' source/package/mtk/drivers/wifi_utility/Makefile
@@ -92,11 +88,22 @@ jobs:
       - name: Resolve config
         working-directory: source
         run: |
+          # The release config is a buildbot repository config. Preserve its
+          # target/kernel settings, but do not compile every optional kmod,
+          # every target-specific package, SDK, ImageBuilder or toolchain.
+          sed -i -E '/^CONFIG_PACKAGE_.*=m$/d' .config
+          for sym in ALL_KMODS ALL_NONSHARED SDK SDK_LLVM_BPF IB MAKE_TOOLCHAIN COLLECT_KERNEL_DEBUG; do
+            sed -i -E "/^CONFIG_${sym}=y$/d; /^# CONFIG_${sym} is not set$/d" .config
+            echo "# CONFIG_${sym} is not set" >> .config
+          done
+
           make defconfig
+
           for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
             grep -qx "CONFIG_${sym}=y" target/linux/generic/config-6.12
           done
-          grep -E 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro|CONFIG_PACKAGE_kmod-mt_wifi|CONFIG_PACKAGE_mtwifi-cfg=|CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673|CONFIG_MTK_MT_WIFI_MT7986_20260601|CONFIG_MTK_FIRST_IF_IPAILNA|CONFIG_MTK_FAST_NAT_SUPPORT|CONFIG_MTK_WHNAT_SUPPORT|CONFIG_MTK_WARP_V2|CONFIG_ALL_KMODS' .config || true
+          grep -qx '# CONFIG_ALL_KMODS is not set' .config
+          grep -qx '# CONFIG_ALL_NONSHARED is not set' .config
           grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' .config
           grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' .config
           grep -qx 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' .config
@@ -123,30 +130,19 @@ jobs:
         shell: bash
         run: |
           set +e
-          # Keep the official ALL_KMODS kernel baseline, but tolerate failures
-          # from optional (=m) package builds exactly as the build system allows.
-          # Required proprietary Wi-Fi packages are explicitly =y, so their
-          # failures remain fatal and cannot be hidden by IGNORE_ERRORS=m.
-          make -j"$(nproc)" IGNORE_ERRORS=m > "$GITHUB_WORKSPACE/build-parallel.log" 2>&1
-          rc=$?
-
-          if [ "$rc" -eq 0 ]; then
-            echo "Build completed successfully."
-            exit 0
-          fi
-
-          echo "Parallel build failed (rc=$rc); retrying with make -j1 V=s IGNORE_ERRORS=m."
-          make -j1 V=s IGNORE_ERRORS=m > "$GITHUB_WORKSPACE/build-verbose.log" 2>&1
+          make -j"$(nproc)" V=sc > "$GITHUB_WORKSPACE/build-parallel.log" 2>&1
           rc=$?
 
           if [ "$rc" -ne 0 ]; then
             {
               echo "===== MATCHED ERRORS ====="
-              grep -Ein 'error:|fatal:|undefined reference|No rule to make target|not found|failed|Error [0-9]+' "$GITHUB_WORKSPACE/build-verbose.log" | tail -n 250 || true
+              grep -Ein 'error:|fatal:|undefined reference|No rule to make target|not found|failed|Error [0-9]+' "$GITHUB_WORKSPACE/build-parallel.log" | tail -n 300 || true
               echo
-              echo "===== LAST 350 LINES ====="
-              tail -n 350 "$GITHUB_WORKSPACE/build-verbose.log" || true
+              echo "===== LAST 500 LINES ====="
+              tail -n 500 "$GITHUB_WORKSPACE/build-parallel.log" || true
             } | tee "$GITHUB_WORKSPACE/build-error.log"
+          else
+            echo "Build completed successfully."
           fi
 
           exit "$rc"
