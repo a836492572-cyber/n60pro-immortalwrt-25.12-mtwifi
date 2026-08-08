@@ -1,101 +1,187 @@
 # Codex Context — N60 Pro
 
-Updated: 2026-08-07
+Updated: 2026-08-09
+
+Read `AGENTS.md` and `docs/BUILD_GATE.md` before using this file. Those two files contain the permanent process rules; this file records current technical state and proven/disproven facts.
 
 ## Working model
-- ChatGPT decides architecture, debugging direction, and the exact scope of each change.
-- Codex executes requested inspection/edit/git/gh tasks.
-- By default, inspection tasks are read-only. Do not modify or push unless explicitly instructed.
+- ChatGPT decides architecture, debugging direction, failure domain, and exact change scope.
+- Codex performs only targeted repository inspection/edit/cheap validation/git work requested by ChatGPT.
+- Optimize for low Codex quota and few full builds: reuse this context, avoid broad rescans, do not make Codex repeat analysis already completed.
+- GitHub Actions is the final integration build, not the exploratory debugger.
+- A build-triggering push must pass `docs/BUILD_GATE.md` first.
 
 ## Hardware / boot facts
 - Device: Netcore N60 Pro, MT7986A.
-- Hardware mod: 2 GiB RAM + 512 MiB SPI-NAND.
+- Hardware mod: 2 GiB DDR4 + 512 MiB SPI-NAND.
 - U-Boot: N60PRO U-Boot 2025 WildEdition.
-- Current WildEdition page shows the 512 MiB MAX / ~506.5 MiB layout and no U-Boot-side NMBM management.
-- UBI/firmware area begins around `0x0580000`; intended size `0x1fa80000` (~506.5 MiB).
+- UBI/firmware area begins at `0x0580000`; intended size `0x1fa80000` (~506.5 MiB).
 - Normal firmware work must not modify BL2/FIP/U-Boot.
-- NMBM is not categorically forbidden. Linux-side NMBM may be valid if the final storage design calls for it, but its actual state/effect must be verified rather than assumed from a DTS property alone.
+- NMBM is not categorically forbidden or required; never change it from assumption alone.
 
-## Proven-good baselines
-### Official initramfs
-Official ImmortalWrt 25.12.1 initramfs boots correctly on this modified hardware:
-- DHCP works.
-- Router is reachable at `192.168.1.1`.
-- LuCI works.
-- All four LAN ports are recognized.
-- ~1.94 GiB RAM is recognized.
-
-This proves the modified hardware, U-Boot, RAM, and basic official N60 Pro networking support are viable.
-
-### Proven-good flashed sysupgrade reference
-The user also has a forum-built N60 Pro sysupgrade `.bin` that repeatedly boots successfully on this same router even after erasing UBI and resetting U-Boot environment variables.
-Use this firmware only as compatibility evidence/reference, NOT as the base tree for the final firmware.
-Known useful structural facts from the reference:
-- classic sysupgrade TAR layout
-- separate kernel FIT and squashfs rootfs payloads
-- intended 512 MiB / ~506.5 MiB flash layout
-- it demonstrates that the installed WildEdition + modified NAND can boot a conventional kernel/rootfs sysupgrade design reliably
-
-## Final firmware target
+## Final firmware target — hard requirements
 - Official ImmortalWrt 25.12.1 commit: `a3378d1a2c15beb2faf4b0bce9c00f07143efa29`.
 - Linux 6.12 from that release.
-- Official N60 Pro Ethernet / PHY / DSA / switch remains authoritative.
-- MTK compatibility donor: `chasey-dev/immortalwrt-mt798x-rebase` commit `eb724bb94de346f36b35bdb0f7de31b529bbc885`.
+- Official N60 Pro Ethernet / PHY / DSA / switch / platform networking remains authoritative.
+- MTK donor: `chasey-dev/immortalwrt-mt798x-rebase` commit `eb724bb94de346f36b35bdb0f7de31b529bbc885`.
 - Proprietary `mt_wifi` 7.6.7.3.
 - 237 radio source commit: `ec9ef10efc65da1e6d1de4e2c043c0e13d08eed8`.
-- Required RF behavior: `E2pAccessMode=2`, `SKUenable=0`, `TxPower=100`, iPA/iLNA, MT7986/MT7976.
-- Final system should differ from pristine official 25.12.1 only where required by the 2 GiB / 512 MiB hardware and proprietary 237 Wi-Fi path.
+- Donor code is limited to proprietary Wi-Fi and specifically justified Linux 6.12 compatibility pieces; never import the donor whole `target/linux/mediatek/` tree.
+- WARP/HNAT/WHNAT/Fast-NAT remain disabled unless architecture is explicitly changed later.
 
-## Important build history
-- Build #17 compiled successfully but the flashed image had broken LAN/DHCP because a donor MediaTek target overlay replaced official networking integration.
-- Commit `e54d88620b985a49365634bc716191d8e3089df6` stopped the full donor `target/linux/mediatek/` overlay and restored official DTS/Ethernet/PHY/DSA authority.
-- Build #19 failed on missing `mt_eeprom_read_wifi`; fixed by importing only donor `wifi_utility` plus required Linux 6.12 compatibility patches. Commit `77a573c31257d99cb97c8364d5c798c2e63885a6`.
-- Build #20 passed that point but failed in WARP because `net/ra_nat.h` was missing.
-- Commits `5e4f9c6d2e4fc82c329d7391857ce1226a180270` and `090d415697d41401964b541f529297e5b6741549` decoupled `mt_wifi` from WARP/HNAT and disabled WARP/HNAT/WHNAT/Fast-NAT.
-- Commit `b060bf18e8f146e94f1daf7094fde80135747b3d` added CI assertions for that isolation state.
+Required 237 selections:
+```text
+CONFIG_MTK_CHIP_MT7986=y
+CONFIG_MTK_FIRST_IF_EEPROM_FLASH=y
+CONFIG_MTK_FIRST_IF_IPAILNA=y
+CONFIG_MTK_FIRST_IF_MT7986=y
+CONFIG_MTK_WIFI_ADIE_TYPE="mt7976"
+CONFIG_MTK_WIFI_SKU_TYPE="AX6000"
+CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y
+CONFIG_MTK_MT_WIFI_MT7986_20260601=y
+```
 
-## Build #21 result
-GitHub Actions Run #21:
-- run id: `31102432600`
-- head: `b060bf18e8f146e94f1daf7094fde80135747b3d`
-- compile result: SUCCESS
-- produced the expected N60 Pro 25.12.1 / Linux 6.12 / mt_wifi 7.6.7.3 artifact
-- real-device result: FAILS TO ENTER LINUX / remains in U-Boot-state indication after flashing and power cycling
+Required RF files:
+- `l1profile.dat`
+- `mt7986-ax6000.dbdc.b0.dat`
+- `mt7986-ax6000.dbdc.b1.dat`
+- `mt7986-sku.dat`
+- `mt7986-sku-bf.dat`
 
-Therefore Build #21 solved the compile chain but did NOT solve the boot/runtime chain.
-Do not treat compile success as proof of a correct firmware design.
+Required RF behavior:
+- `CountryCode=CN`
+- `E2pAccessMode=2`
+- `SKUenable=0`
+- `TxPower=100`
+- iPA/iLNA
 
-## Current architecture issue under investigation
-The current builder keeps the official 25.12.1 N60 Pro FIT-rootdisk style image path, including the official N60 Pro image/DTS boot model, while expanding RAM and UBI size.
-The proven-good flashed reference uses a classic sysupgrade TAR with separate kernel/rootfs payloads.
+Required Linux 6.12 WEXT compatibility delta:
+```text
+CONFIG_WIRELESS_EXT=y
+CONFIG_WEXT_CORE=y
+CONFIG_WEXT_PRIV=y
+CONFIG_WEXT_PROC=y
+CONFIG_WEXT_SPY=y
+```
+Do not widen the generic kernel config beyond evidence-backed minimum compatibility deltas.
 
-Before the next long build, audit the whole path rather than changing one symptom at a time:
-- pristine official N60 Pro DTS/storage/boot properties
-- current 2 GiB / 512 MiB DTS edits
-- official `Device/netcore_n60-pro` image profile
-- generated sysupgrade format
-- UBI/rootfs/kernel volume expectations
-- WildEdition boot expectations
-- NMBM state/effect
-- proprietary Wi-Fi imports and their true minimum dependencies
+## Proven-good hardware baseline
+The strongest positive control is the pure official 25.12.1 classic image:
+- `N60Pro_DIAG_OFFICIAL25_classic_no-linux-ubi.bin`
+- size: `15,739,148`
+- SHA256: `f5291994c67d290569b67891d73f76ee3e02ccd9a3e583ffcbce2669cfa90e18`
+- exact official 25.12.1 sysupgrade raw Image + official rootfs, 2 GiB RAM / 506.5 MiB UBI classic layout
+- real-device result: boots normally and enters the system
 
-Do not copy the reference firmware's whole DTS, network stack, package set, or system tree. It is evidence, not a source base.
+Therefore do NOT blame 2 GiB RAM, 512 MiB NAND, WildEdition U-Boot, Linux 6.12, classic image route, or the 506.5 MiB UBI size again without new direct evidence.
+
+Official initramfs also boots correctly on this hardware with DHCP/LuCI/all LAN ports/~1.94 GiB RAM.
+
+## Proprietary Wi-Fi dependency facts
+- `wifi_utility` provides EEPROM helpers used by both `conninfra` and `mt_wifi`.
+- `conninfra` and `mt_wifi` directly require `mt_eeprom_read_wifi`; `mt_wifi` also uses `mt_eeprom_write_wifi`.
+- `wifi_utility` was modularized as `mtk_wifi_utility.ko` to avoid embedding it in vmlinux.
+- Initial module build hit unexported `__of_find_all_nodes`; code was changed to compatible-node iteration and later compiled.
+- Current diagnostic intent: install `mtk_wifi_utility`, `conninfra`, and `mt_wifi` but do NOT auto-load them.
+- If the system boots with LAN, load manually in this order and inspect after each: `mtk_wifi_utility` -> `conninfra` -> `mt_wifi`.
+
+## Important no-repeat conclusions
+Do not repeat these experiments/theories without new direct evidence:
+- Whole donor MediaTek target overlay broke official networking authority; never reintroduce it.
+- #25 proprietary build had no DHCP/IP/LAN and Wi-Fi LED off.
+- #26 disabled proprietary module AUTOLOAD and still had no system/IP: autoload/order alone is disproved.
+- #22 no-linux-ubi failed: `linux,ubi` alone is not the cause.
+- Reference rootfs + #22 kernel failed: rootfs size/content alone is not the primary cause.
+- #22 kernel + reference DTB failed: #22 DTB is not the sole cause.
+- RBUS matcher disable experiment failed; do not repeat.
+- Marker v1/v2 tests were non-diagnostic.
+- #22 kernel + official initramfs failed: evidence points to custom kernel side, but it is not standalone proof of one exact kernel cause.
+- #18 hybrid did not establish a known-good custom kernel; do not call #18 known-good.
+- #25 kernel + proven-good official classic DTB failed: do not repeat DTB-swap theory as the main fix.
+- Official kernel + #25 rootfs hybrid is invalid as a clean rootfs diagnostic because of module ABI/symbol mismatch.
+- ITB vs classic is resolved by the pure official classic positive control.
+- Smaller Image size is not failure evidence.
+- Do not return to module autoload as the sole suspect.
+
+## Build history relevant to the current state
+### #28
+- Run ID `31224445779`, head `99a57a0409d9f0817c5bc8d6329aa8fc5dacf458`.
+- Fatal: `iwe_stream_add_point` / `iwe_stream_add_event` undefined in `mt_wifi.ko`.
+- Root fact: legacy WEXT is required by proprietary mt_wifi.
+
+### #29
+- Commit `cff1a0bbbb0676d91393ae3acc84f2f53eb14a1d`.
+- Run ID `31240440992`.
+- Restored only the five required WEXT symbols on official generic kernel baseline.
+- Failed because CI still had a raw `git diff --exit-code -- target/linux/generic/config-6.12` guard that contradicted the intentional WEXT delta; not a compiler failure.
+
+### #30
+- Commit `2d1bac8d1aaa66f9ae5b068714678dd03a8b3279`.
+- Run ID `31240892620`.
+- Real fatal: optional `package/kernel/rtl8812au-ct` failed with `-Werror=restrict`.
+- Root cause was the official release buildbot config enabling huge repository scope such as `CONFIG_ALL_KMODS=y` / `CONFIG_ALL_NONSHARED=y`.
+- This optional package is not part of the N60 Pro proprietary Wi-Fi target and should not be treated as a product requirement.
+
+### #31
+- Commit `4465d1b8eaefa91095d59bef2e20859039e967fa`.
+- Run ID `31252319910`.
+- Parallel build plus full serial retry hit the 6-hour timeout; no artifact.
+- Lesson: do not compile the release buildbot's huge optional package scope and do not duplicate full work with a serial retry.
+
+### #32
+- Commit `e6dd5a6b78b21cb82baf8e59e18fc7d1ef8646e0`.
+- Run ID `31275263302`.
+- Buildbot-only bulk selectors/modules were pruned; one parallel build only.
+- Failed after about 2h26m.
+- The compact failure artifact did NOT preserve enough context to honestly identify the real root package/fatal.
+- Do not patch based on ignored errors/configure probes from the truncated summary.
+
+### #33 — current run
+- Head before governance-doc commits: `7a878d48b88a2186be47d1ab77f841aabb83c135`.
+- Run ID `31281536082`.
+- Purpose: CI diagnostic-only change that preserves the full `build-parallel.log.gz` on failure and larger matched-error context.
+- No firmware architecture/RF/DTS/autoload change in #33.
+- At the time this context was updated, #33 was still `in_progress`.
+- Do NOT push any file under `.github/workflows/**`, `scripts/**`, or `config/**` while #33 is active because the workflow uses `concurrency.cancel-in-progress: true` and those paths can launch a new run.
+
+## Current repository workflow trigger fact
+`.github/workflows/build.yml` currently runs on push to `main` only when these paths change:
+- `.github/workflows/build.yml`
+- `scripts/**`
+- `config/**`
+
+Governance-only changes to `AGENTS.md` and `docs/**` do not trigger the firmware build.
+
+## Current process hardening
+Permanent process is defined in:
+- `AGENTS.md`
+- `docs/BUILD_GATE.md`
+
+Key rule: one evidence-backed failure domain is analyzed broadly enough to find all cheap/static issues in that chain, then one coherent minimal batch is changed and prevalidated before one full Actions build. Do not use an "one small error -> one full build" loop.
+
+## Next technical action after #33 completes
+If #33 fails:
+1. fetch the full failure artifact;
+2. inspect/decompress `build-parallel.log.gz`;
+3. identify the first real unignored terminating error and its package/target;
+4. audit that entire failure domain for other static/cheap failures;
+5. only then prepare one coherent fix batch and run the build gate.
+
+If #33 succeeds:
+1. inspect the success artifact before flashing;
+2. verify 25.12.1, N60 Pro image, hashes/buildinfo/profile, trimmed build scope, proprietary requirements and disabled acceleration assumptions;
+3. then use the already-validated classic flashing route;
+4. first verify system/LAN with proprietary modules installed but not auto-loaded, then manually load `mtk_wifi_utility` -> `conninfra` -> `mt_wifi`.
 
 ## Files that normally matter
+- `AGENTS.md` — permanent project/Codex hard rules.
+- `docs/BUILD_GATE.md` — mandatory pre-build gate.
+- `docs/CODEX_CONTEXT.md` — current technical state and no-repeat knowledge.
 - `.github/workflows/build.yml` — pinned sources, CI assertions, build/log/artifact flow.
-- `scripts/prepare.sh` — minimal proprietary Wi-Fi import, compatibility pieces, RF profiles, hardware/layout edits and guard rails.
-- `config/n60pro-extra.config` — target and proprietary Wi-Fi feature selections.
-- pristine official 25.12.1 `target/linux/mediatek/image/filogic.mk` and N60 Pro DTS — comparison baseline only unless an explicit task says to patch their resulting tree.
+- `scripts/prepare.sh` — proprietary Wi-Fi import, compatibility pieces, RF profiles, hardware/layout edits and guard rails.
+- `scripts/rebase-official-release-config.sh` — official release config/kernel baseline handling and WEXT delta.
+- `scripts/fix-wifi-utility-module.sh` — wifi_utility module packaging/build adaptations.
+- `config/n60pro-extra.config` — target and proprietary Wi-Fi selections where still used.
 
-## Current decision policy
-1. Do not trigger the next long build merely to test another guess.
-2. First perform a read-only architecture audit and identify every required change for a bootable 2 GiB / 512 MiB image.
-3. Keep official N60 Pro Ethernet/PHY/DSA/switch untouched.
-4. Keep donor imports limited to the proprietary Wi-Fi path and justified Linux 6.12 compatibility pieces.
-5. Do not decide NMBM policy from assumptions; report actual config/DTS/boot-layout facts and let ChatGPT choose the final design.
-6. After ChatGPT approves one complete minimal plan, implement it in one focused change, inspect the diff, then push once for the next GitHub Actions build.
-7. After a successful build, inspect the produced image structure as required before asking the user to flash it.
-
-## What not to upload into a Codex project
-Do not duplicate full official ImmortalWrt trees, full donor trees, piles of old logs, or unrelated firmware artifacts.
-If binary comparison is explicitly requested, use only the specific known-good reference firmware and the specific test artifact needed for that task, preferably outside git tracking.
+## Codex efficiency rule
+For each task, Codex should receive only the already-decided target, relevant files, required edits/checks, and explicit push authorization. Prefer targeted `grep/find/git diff` and cheap checks; avoid broad tree exploration, repeated project explanation, full local firmware builds, and speculative cleanup.
