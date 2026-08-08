@@ -5,15 +5,24 @@ SOURCE="${1:?usage: rebase-official-release-config.sh <official-source> <builder
 BUILDER="${2:?usage: rebase-official-release-config.sh <official-source> <builder-root>}"
 OFFICIAL_CONFIG_URL="https://downloads.immortalwrt.org/releases/25.12.1/targets/mediatek/filogic/config.buildinfo"
 
-# Restore the official 25.12.1 generic kernel baseline byte-for-byte.
-# The proprietary Wi-Fi stack must adapt to the official kernel, not vice versa.
+# Restore the official 25.12.1 generic kernel baseline first.
+# The only intentional generic-kernel delta kept below is legacy WEXT, which
+# proprietary mt_wifi 7.6.7.3 requires for iwe_stream_add_* symbols.
 git -C "$SOURCE" checkout -- target/linux/generic/config-6.12
 WEXT_PATCH="target/linux/generic/hack-6.12/299-add-wext-kconfig.patch"
-if git -C "$SOURCE" cat-file -e "HEAD:$WEXT_PATCH" 2>/dev/null; then
-    git -C "$SOURCE" checkout -- "$WEXT_PATCH"
-else
-    rm -f "$SOURCE/$WEXT_PATCH"
-fi
+GENERIC_CONFIG="$SOURCE/target/linux/generic/config-6.12"
+
+# prepare.sh installs this exact Kconfig-only patch from the pinned donor. It
+# only makes the legacy WEXT options selectable; it does not import donor
+# Ethernet/WED/PPE/PHY code.
+test -f "$SOURCE/$WEXT_PATCH"
+for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
+  if grep -qx "# CONFIG_${sym} is not set" "$GENERIC_CONFIG"; then
+    sed -i "s/^# CONFIG_${sym} is not set$/CONFIG_${sym}=y/" "$GENERIC_CONFIG"
+  elif ! grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"; then
+    echo "CONFIG_${sym}=y" >> "$GENERIC_CONFIG"
+  fi
+done
 
 # Start from ImmortalWrt's actual 25.12.1 filogic release build configuration.
 # Keep ALL_KMODS/target kernel selections so the generated kernel matches the
@@ -66,14 +75,20 @@ grep -E '^(CONFIG_MTK_|# CONFIG_MTK_|CONFIG_first_card|CONFIG_PACKAGE_kmod-conni
     "$BUILDER/config/n60pro-extra.config" >> "$SOURCE/.config"
 echo 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' >> "$SOURCE/.config"
 
-# Guard: generic Linux config is now exactly the official release source again.
-git -C "$SOURCE" diff --exit-code -- target/linux/generic/config-6.12
-if ! git -C "$SOURCE" cat-file -e "HEAD:$WEXT_PATCH" 2>/dev/null; then
-    test ! -e "$SOURCE/$WEXT_PATCH"
-fi
+# Guard: keep the official generic baseline except for the five required WEXT
+# selections above. No other generic kernel config drift is allowed.
+for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
+  grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"
+done
+unexpected="$({ git -C "$SOURCE" diff --unified=0 -- target/linux/generic/config-6.12 || true; } \
+  | grep -E '^[+-](CONFIG_|# CONFIG_)' \
+  | grep -Ev '^[+-](CONFIG_(WIRELESS_EXT|WEXT_CORE|WEXT_PRIV|WEXT_PROC|WEXT_SPY)=y|# CONFIG_(WIRELESS_EXT|WEXT_CORE|WEXT_PRIV|WEXT_PROC|WEXT_SPY) is not set)$' \
+  || true)"
+test -z "$unexpected"
+test -f "$SOURCE/$WEXT_PATCH"
 
 grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' "$SOURCE/.config"
 
-echo 'official 25.12.1 filogic release config rebased: OK'
+echo 'official 25.12.1 filogic release config rebased + required WEXT: OK'
