@@ -123,7 +123,11 @@ jobs:
         shell: bash
         run: |
           set +e
-          make -j"$(nproc)" > "$GITHUB_WORKSPACE/build-parallel.log" 2>&1
+          # Keep the official ALL_KMODS kernel baseline, but tolerate failures
+          # from optional (=m) package builds exactly as the build system allows.
+          # Required proprietary Wi-Fi packages are explicitly =y, so their
+          # failures remain fatal and cannot be hidden by IGNORE_ERRORS=m.
+          make -j"$(nproc)" IGNORE_ERRORS=m > "$GITHUB_WORKSPACE/build-parallel.log" 2>&1
           rc=$?
 
           if [ "$rc" -eq 0 ]; then
@@ -131,8 +135,8 @@ jobs:
             exit 0
           fi
 
-          echo "Parallel build failed (rc=$rc); retrying with make -j1 V=s."
-          make -j1 V=s > "$GITHUB_WORKSPACE/build-verbose.log" 2>&1
+          echo "Parallel build failed (rc=$rc); retrying with make -j1 V=s IGNORE_ERRORS=m."
+          make -j1 V=s IGNORE_ERRORS=m > "$GITHUB_WORKSPACE/build-verbose.log" 2>&1
           rc=$?
 
           if [ "$rc" -ne 0 ]; then
