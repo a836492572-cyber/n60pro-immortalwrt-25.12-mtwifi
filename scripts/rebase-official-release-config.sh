@@ -25,14 +25,24 @@ for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
 done
 
 # Start from ImmortalWrt's actual 25.12.1 filogic release build configuration.
-# Keep ALL_KMODS/target kernel selections so the generated kernel matches the
-# official release baseline as closely as possible, but build only N60 Pro.
+# Preserve target/kernel settings, but remove buildbot cleanup/rebuild controls
+# that are unsafe for this single-device GitHub Actions build.
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 curl -fL --retry 5 --retry-delay 2 "$OFFICIAL_CONFIG_URL" -o "$tmp"
 grep -q '^CONFIG_TARGET_mediatek=y$' "$tmp"
 grep -q '^CONFIG_TARGET_mediatek_filogic=y$' "$tmp"
 cp "$tmp" "$SOURCE/.config"
+
+# The release buildinfo is generated for ImmortalWrt's buildbot. #33 proved
+# that CONFIG_BUILDBOT causes concurrent toolchain .ver_check cleanup to remove
+# target/toolchain state during this clean parallel build. AUTOREMOVE and the
+# DEVEL-default AUTOREBUILD are also destructive/rebuild-oriented controls that
+# are unnecessary for a one-shot device image. Keep them explicitly disabled.
+for sym in BUILDBOT AUTOREMOVE AUTOREBUILD; do
+  sed -i -E "/^CONFIG_${sym}=y$/d; /^# CONFIG_${sym} is not set$/d" "$SOURCE/.config"
+  echo "# CONFIG_${sym} is not set" >> "$SOURCE/.config"
+done
 
 # Limit image generation to N60 Pro. Do not discard shared target/kernel config.
 sed -i -E '/^(# )?CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_/d' "$SOURCE/.config"
@@ -87,8 +97,11 @@ unexpected="$({ git -C "$SOURCE" diff --unified=0 -- target/linux/generic/config
 test -z "$unexpected"
 test -f "$SOURCE/$WEXT_PATCH"
 
+for sym in BUILDBOT AUTOREMOVE AUTOREBUILD; do
+  grep -qx "# CONFIG_${sym} is not set" "$SOURCE/.config"
+done
 grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' "$SOURCE/.config"
 
-echo 'official 25.12.1 filogic release config rebased + required WEXT: OK'
+echo 'official 25.12.1 filogic release config rebased + required WEXT + buildbot cleanup disabled: OK'
