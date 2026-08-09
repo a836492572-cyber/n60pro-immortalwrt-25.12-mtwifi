@@ -104,6 +104,9 @@ jobs:
           done
           grep -qx '# CONFIG_ALL_KMODS is not set' .config
           grep -qx '# CONFIG_ALL_NONSHARED is not set' .config
+          for sym in BUILDBOT AUTOREMOVE AUTOREBUILD; do
+            grep -qx "# CONFIG_${sym} is not set" .config
+          done
           grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' .config
           grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' .config
           grep -qx 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' .config
