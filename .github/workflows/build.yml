@@ -173,8 +173,9 @@ jobs:
         run: |
           mkdir -p artifact
           find source/bin/targets/mediatek/filogic -maxdepth 1 -type f \
-            \( -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
+            \( -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -o -name '*netcore_n60-pro*initramfs-recovery.itb' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
             -exec cp -v {} artifact/ \;
+          test -n "$(find artifact -type f -name '*netcore_n60-pro*initramfs-recovery.itb' -print -quit)"
           test -n "$(find artifact -type f -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -print -quit)"
           grep -q '25.12.1' artifact/profiles.json
           ! grep -q '25.12-SNAPSHOT' artifact/profiles.json
