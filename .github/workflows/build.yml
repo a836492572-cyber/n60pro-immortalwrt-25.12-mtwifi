@@ -68,7 +68,6 @@ jobs:
         run: |
           bash ./scripts/prepare.sh "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/mtk-donor" "$GITHUB_WORKSPACE"
           bash ./scripts/fix-wifi-utility-module.sh "$GITHUB_WORKSPACE/source"
-          bash ./scripts/rebase-official-release-config.sh "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE"
 
       - name: Keep proprietary WiFi installed but not autoloaded for diagnostic 27
         run: |
@@ -85,6 +84,10 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+      - name: Rebase official release config and kernel sidecar
+        run: |
+          bash ./scripts/rebase-official-release-config.sh "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE"
+
       - name: Resolve config
         working-directory: source
         run: |
@@ -98,6 +101,21 @@ jobs:
           done
 
           make defconfig
+
+          test -f .config.kernel-official
+          grep -qx 'CONFIG_ALL_KMODS=y' .config.kernel-official
+          grep -qx 'CONFIG_ALL_NONSHARED=y' .config.kernel-official
+          grep -qx '# CONFIG_ALL_KMODS is not set' .config
+          grep -qx '# CONFIG_ALL_NONSHARED is not set' .config
+          grep -Fq '$(TOPDIR)/.config.kernel-official >> $(LINUX_DIR)/.config.target' include/kernel-defaults.mk
+          grep -Fq '$(TOPDIR)/.config.kernel-official $(KERNEL_PATCHVER) > $(LINUX_DIR)/.config.override' include/kernel-defaults.mk
+          ! grep -Fq '$(TOPDIR)/.config >> $(LINUX_DIR)/.config.target' include/kernel-defaults.mk
+          ! grep -Fq 'package-metadata.pl kconfig $(TMP_DIR)/.packageinfo $(TOPDIR)/.config $(KERNEL_PATCHVER)' include/kernel-defaults.mk
+          scripts/package-metadata.pl kconfig tmp/.packageinfo .config.kernel-official 6.12 > "$GITHUB_WORKSPACE/kernel-sidecar.config.override"
+          scripts/package-metadata.pl kconfig tmp/.packageinfo .config 6.12 > "$GITHUB_WORKSPACE/kernel-trimmed.config.override"
+          test -s "$GITHUB_WORKSPACE/kernel-sidecar.config.override"
+          ! cmp -s "$GITHUB_WORKSPACE/kernel-sidecar.config.override" "$GITHUB_WORKSPACE/kernel-trimmed.config.override"
+          test "$(wc -l < "$GITHUB_WORKSPACE/kernel-sidecar.config.override")" -gt "$(wc -l < "$GITHUB_WORKSPACE/kernel-trimmed.config.override")"
 
           for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
             grep -qx "CONFIG_${sym}=y" target/linux/generic/config-6.12

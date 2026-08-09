@@ -25,14 +25,49 @@ for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
 done
 
 # Start from ImmortalWrt's actual 25.12.1 filogic release build configuration.
-# Preserve target/kernel settings, but remove buildbot cleanup/rebuild controls
-# that are unsafe for this single-device GitHub Actions build.
+# Expand it before any package pruning so kernel package->Kconfig generation can
+# keep using the official full release package scope.
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 curl -fL --retry 5 --retry-delay 2 "$OFFICIAL_CONFIG_URL" -o "$tmp"
 grep -q '^CONFIG_TARGET_mediatek=y$' "$tmp"
 grep -q '^CONFIG_TARGET_mediatek_filogic=y$' "$tmp"
 cp "$tmp" "$SOURCE/.config"
+make -C "$SOURCE" defconfig
+cp "$SOURCE/.config" "$SOURCE/.config.kernel-official"
+grep -qx 'CONFIG_TARGET_mediatek=y' "$SOURCE/.config.kernel-official"
+grep -qx 'CONFIG_TARGET_mediatek_filogic=y' "$SOURCE/.config.kernel-official"
+grep -qx 'CONFIG_ALL_KMODS=y' "$SOURCE/.config.kernel-official"
+grep -qx 'CONFIG_ALL_NONSHARED=y' "$SOURCE/.config.kernel-official"
+
+# OpenWrt's kernel configure step normally feeds the final top-level .config to
+# package-metadata.pl. Our final .config is intentionally package-trimmed, so
+# route only kernel override generation through the official sidecar above.
+KERNEL_DEFAULTS="$SOURCE/include/kernel-defaults.mk"
+python3 - "$KERNEL_DEFAULTS" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+old_kernel = '\tawk \'/^(#[[:space:]]+)?CONFIG_KERNEL/{sub("CONFIG_KERNEL_","CONFIG_");print}\' $(TOPDIR)/.config >> $(LINUX_DIR)/.config.target\n'
+new_kernel = '\tawk \'/^(#[[:space:]]+)?CONFIG_KERNEL/{sub("CONFIG_KERNEL_","CONFIG_");print}\' $(TOPDIR)/.config.kernel-official >> $(LINUX_DIR)/.config.target\n'
+old_metadata = '\t$(SCRIPT_DIR)/package-metadata.pl kconfig $(TMP_DIR)/.packageinfo $(TOPDIR)/.config $(KERNEL_PATCHVER) > $(LINUX_DIR)/.config.override\n'
+new_metadata = '\t[ -f $(TOPDIR)/.config.kernel-official ]\n\t$(SCRIPT_DIR)/package-metadata.pl kconfig $(TMP_DIR)/.packageinfo $(TOPDIR)/.config.kernel-official $(KERNEL_PATCHVER) > $(LINUX_DIR)/.config.override\n'
+for name, old in [('CONFIG_KERNEL awk input', old_kernel), ('kernel package-metadata input', old_metadata)]:
+    if s.count(old) != 1:
+        raise SystemExit(f'{name} pattern count != 1: {s.count(old)}')
+s = s.replace(old_kernel, new_kernel, 1).replace(old_metadata, new_metadata, 1)
+p.write_text(s)
+PY
+grep -Fq '$(TOPDIR)/.config.kernel-official >> $(LINUX_DIR)/.config.target' "$KERNEL_DEFAULTS"
+grep -Fq '$(TOPDIR)/.config.kernel-official $(KERNEL_PATCHVER) > $(LINUX_DIR)/.config.override' "$KERNEL_DEFAULTS"
+! grep -Fq '$(TOPDIR)/.config >> $(LINUX_DIR)/.config.target' "$KERNEL_DEFAULTS"
+! grep -Fq 'package-metadata.pl kconfig $(TMP_DIR)/.packageinfo $(TOPDIR)/.config $(KERNEL_PATCHVER)' "$KERNEL_DEFAULTS"
+
+# Now derive the actual build config from that full official sidecar. Preserve
+# target/kernel settings, but remove buildbot cleanup/rebuild controls that are
+# unsafe for this single-device GitHub Actions build.
+cp "$SOURCE/.config.kernel-official" "$SOURCE/.config"
 
 # The release buildinfo is generated for ImmortalWrt's buildbot. #33 proved
 # that CONFIG_BUILDBOT causes concurrent toolchain .ver_check cleanup to remove
@@ -103,5 +138,8 @@ done
 grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' "$SOURCE/.config"
+test -f "$SOURCE/.config.kernel-official"
+grep -qx 'CONFIG_ALL_KMODS=y' "$SOURCE/.config.kernel-official"
+grep -qx 'CONFIG_ALL_NONSHARED=y' "$SOURCE/.config.kernel-official"
 
-echo 'official 25.12.1 filogic release config rebased + required WEXT + buildbot cleanup disabled: OK'
+echo 'official 25.12.1 filogic release config sidecar + required WEXT + buildbot cleanup disabled: OK'
