@@ -45,10 +45,35 @@ PY
 
 # Legacy WEXT is the only intentional change to the official built-in wireless
 # kernel code. The proprietary driver still needs these hidden 6.12 symbols.
-WEXT_PATCH_SRC="$DONOR/target/linux/generic/hack-6.12/299-add-wext-kconfig.patch"
 WEXT_PATCH_DST="$SOURCE/target/linux/generic/hack-6.12/299-add-wext-kconfig.patch"
-test -f "$WEXT_PATCH_SRC"
-install -m0644 "$WEXT_PATCH_SRC" "$WEXT_PATCH_DST"
+mkdir -p "$(dirname "$WEXT_PATCH_DST")"
+sed -e 's/@TAB@/\t/g' -e 's/^ @EMPTY@$/ /' > "$WEXT_PATCH_DST" <<'PATCH'
+--- a/net/wireless/Kconfig
++++ b/net/wireless/Kconfig
+@@ -1,6 +1,6 @@
+ # SPDX-License-Identifier: GPL-2.0-only
+ config WIRELESS_EXT
+-@TAB@bool
++	bool "Wireless extensions"
+ @EMPTY@
+ config WEXT_CORE
+ @TAB@def_bool y
+@@ -12,10 +12,10 @@ config WEXT_PROC
+ @TAB@depends on WEXT_CORE
+ @EMPTY@
+ config WEXT_SPY
+-@TAB@bool
++	bool "WEXT_SPY"
+ @EMPTY@
+ config WEXT_PRIV
+-@TAB@bool
++	bool "WEXT_PRIV"
+ @EMPTY@
+ config CFG80211
+ @TAB@tristate "cfg80211 - wireless configuration API"
+PATCH
+grep -Eq 'WIRELESS_EXT|WEXT_CORE|WEXT_PRIV|WEXT_PROC|WEXT_SPY' "$WEXT_PATCH_DST"
+! grep -Eq 'LIB80211' "$WEXT_PATCH_DST"
 GENERIC_CONFIG="$SOURCE/target/linux/generic/config-6.12"
 for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
   if grep -qx "# CONFIG_${sym} is not set" "$GENERIC_CONFIG"; then
@@ -370,6 +395,7 @@ grep -q '^CONFIG_PACKAGE_kmod-mt-wifi-utility=y$' "$SOURCE/.config"
 for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
   grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"
 done
+! grep -Eq 'LIB80211' "$WEXT_PATCH_DST"
 ! test -d "$SOURCE/package/mtk/drivers/warp"
 ! grep -q '^PKG_BUILD_DEPENDS:=warp$' "$MT_WIFI_MAKEFILE"
 ! grep -q 'kmod-mediatek_hnat' "$MT_WIFI_MAKEFILE"
