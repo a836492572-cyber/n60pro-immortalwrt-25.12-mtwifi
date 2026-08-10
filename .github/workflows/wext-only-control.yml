@@ -1,0 +1,187 @@
+name: N60 Pro WEXT-only Recovery Control
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/wext-only-control.yml'
+      - 'ci/prepare-wext-only-control.sh'
+
+concurrency:
+  group: n60pro-wext-only-control
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    env:
+      OFFICIAL_COMMIT: a3378d1a2c15beb2faf4b0bce9c00f07143efa29
+      OFFICIAL_FEEDS_BUILDINFO_URL: https://downloads.immortalwrt.org/releases/25.12.1/targets/mediatek/filogic/feeds.buildinfo
+      PACKAGES_COMMIT: e93a938c63124832d549c41da3157e2ec40fbe05
+      LUCI_COMMIT: ed7692cb08a953e2e503287e0337c8b548cf4ba5
+      ROUTING_COMMIT: 76c933906c616a4cdf865611af0a381787bd87b8
+      TELEPHONY_COMMIT: 2618106d5846a4a542fdf5809f0d3ed228ce439b
+      TZ: Asia/Tokyo
+
+    steps:
+      - name: Checkout builder
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
+            g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev \
+            libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
+            libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
+            ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
+            python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
+            unzip vim wget xmlto xxd zlib1g-dev zstd
+
+      - name: Clone official ImmortalWrt 25.12.1
+        run: |
+          git clone --filter=blob:none https://github.com/immortalwrt/immortalwrt.git source
+          cd source
+          git fetch --depth=1 origin "$OFFICIAL_COMMIT"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$OFFICIAL_COMMIT"
+          grep -q '25.12.1' include/version.mk
+
+      - name: Pin official 25.12.1 feeds
+        working-directory: source
+        run: |
+          curl -fL --retry 5 --retry-delay 2 "$OFFICIAL_FEEDS_BUILDINFO_URL" -o feeds.buildinfo
+          grep -Eq "^src-git packages .*\\^${PACKAGES_COMMIT}$" feeds.buildinfo
+          grep -Eq "^src-git luci .*\\^${LUCI_COMMIT}$" feeds.buildinfo
+          grep -Eq "^src-git routing .*\\^${ROUTING_COMMIT}$" feeds.buildinfo
+          grep -Eq "^src-git telephony .*\\^${TELEPHONY_COMMIT}$" feeds.buildinfo
+          grep -E '^src-git (packages|luci|routing|telephony) ' feeds.buildinfo > feeds.conf
+          test "$(grep -c '^src-git ' feeds.conf)" -eq 4
+          ! grep -Eq '^src-git (packages|luci|routing|telephony) .*(;|#)' feeds.conf
+          grep -Eq "^src-git packages .*\\^${PACKAGES_COMMIT}$" feeds.conf
+          grep -Eq "^src-git luci .*\\^${LUCI_COMMIT}$" feeds.conf
+          grep -Eq "^src-git routing .*\\^${ROUTING_COMMIT}$" feeds.conf
+          grep -Eq "^src-git telephony .*\\^${TELEPHONY_COMMIT}$" feeds.conf
+
+      - name: Update pinned feeds
+        working-directory: source
+        run: |
+          ./scripts/feeds update -a
+          test "$(git -C feeds/packages rev-parse HEAD)" = "$PACKAGES_COMMIT"
+          test "$(git -C feeds/luci rev-parse HEAD)" = "$LUCI_COMMIT"
+          test "$(git -C feeds/routing rev-parse HEAD)" = "$ROUTING_COMMIT"
+          test "$(git -C feeds/telephony rev-parse HEAD)" = "$TELEPHONY_COMMIT"
+          ./scripts/feeds install -a
+
+      - name: Prepare WEXT-only recovery control
+        run: |
+          bash ./ci/prepare-wext-only-control.sh "$GITHUB_WORKSPACE/source"
+
+      - name: Gate WEXT-only scope
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$OFFICIAL_COMMIT"
+          test "$(git -C feeds/packages rev-parse HEAD)" = "$PACKAGES_COMMIT"
+          test "$(git -C feeds/luci rev-parse HEAD)" = "$LUCI_COMMIT"
+          test "$(git -C feeds/routing rev-parse HEAD)" = "$ROUTING_COMMIT"
+          test "$(git -C feeds/telephony rev-parse HEAD)" = "$TELEPHONY_COMMIT"
+          test ! -e package/mtk
+          test -z "$(find target/linux -type f \( -name '*5202*' -o -name '*5203*' -o -name '*5204*' \) -print -quit)"
+          ! grep -Eq 'mediatek,wbsys|mediatek,mt7986-consys' target/linux/mediatek/dts/mt7986a-netcore-n60-pro.dts
+          test -f .config.kernel-official
+          grep -qx 'CONFIG_ALL_KMODS=y' .config.kernel-official
+          grep -qx 'CONFIG_ALL_NONSHARED=y' .config.kernel-official
+          grep -qx '# CONFIG_ALL_KMODS is not set' .config
+          grep -qx '# CONFIG_ALL_NONSHARED is not set' .config
+          grep -Fq '$(TOPDIR)/.config.kernel-official >> $(LINUX_DIR)/.config.target' include/kernel-defaults.mk
+          grep -Fq '$(TOPDIR)/.config.kernel-official $(KERNEL_PATCHVER) > $(LINUX_DIR)/.config.override' include/kernel-defaults.mk
+          ! grep -Fq '$(TOPDIR)/.config >> $(LINUX_DIR)/.config.target' include/kernel-defaults.mk
+          ! grep -Fq 'package-metadata.pl kconfig $(TMP_DIR)/.packageinfo $(TOPDIR)/.config $(KERNEL_PATCHVER)' include/kernel-defaults.mk
+          for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
+            grep -qx "CONFIG_${sym}=y" target/linux/generic/config-6.12
+          done
+          test -f target/linux/generic/hack-6.12/299-add-wext-kconfig.patch
+          ! grep -Eq 'LIB80211' target/linux/generic/hack-6.12/299-add-wext-kconfig.patch
+          test "$(git diff --name-only -- target/linux/mediatek | wc -l)" -eq 0
+          git status --short -- target/linux/generic target/linux/mediatek \
+            | grep -Ev '^( M target/linux/generic/config-6\.12|\?\? target/linux/generic/hack-6\.12/299-add-wext-kconfig\.patch)?$' \
+            > wext-only-unexpected-kernel-status.txt || true
+          test ! -s wext-only-unexpected-kernel-status.txt
+          grep -qx 'CONFIG_TARGET_ROOTFS_INITRAMFS=y' .config
+          grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' .config
+          ! grep -Eq '^CONFIG_PACKAGE_(kmod-mt_wifi|kmod-conninfra|kmod-mt-wifi-utility|mtwifi-cfg|luci-app-mtwifi-cfg|kmod-warp|kmod-mediatek_hnat)=' .config
+          ! grep -Eq '^CONFIG_MTK_|^CONFIG_first_card' .config
+
+      - name: Download sources
+        working-directory: source
+        run: |
+          make download -j"$(nproc)"
+          find dl -type f -size -1024c -delete || true
+
+      - name: Build WEXT-only recovery
+        id: build
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          make -j"$(nproc)" V=sc > "$GITHUB_WORKSPACE/build-wext-only.log" 2>&1
+          rc=$?
+
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "===== ERROR CONTEXT ====="
+              grep -Ein -B 20 -A 20 'make\[[0-9]+\]: \*\*\*|error:|fatal:|undefined reference|modpost:|No rule to make target|Error [0-9]+' "$GITHUB_WORKSPACE/build-wext-only.log" | tail -n 2500 || true
+              echo
+              echo "===== LAST 500 LINES ====="
+              tail -n 500 "$GITHUB_WORKSPACE/build-wext-only.log" || true
+            } | tee "$GITHUB_WORKSPACE/build-error.log"
+            gzip -9 -c "$GITHUB_WORKSPACE/build-wext-only.log" > "$GITHUB_WORKSPACE/build-wext-only.log.gz"
+          else
+            echo "WEXT-only recovery build completed successfully."
+          fi
+
+          exit "$rc"
+
+      - name: Collect WEXT-only recovery
+        run: |
+          mkdir -p artifact
+          find source/bin/targets/mediatek/filogic -maxdepth 1 -type f \
+            \( -name '*netcore_n60-pro*initramfs-recovery.itb' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
+            -exec cp -v {} artifact/ \;
+          test -n "$(find artifact -type f -name '*netcore_n60-pro*initramfs-recovery.itb' -print -quit)"
+          grep -q '25.12.1' artifact/profiles.json
+          ! grep -q '25.12-SNAPSHOT' artifact/profiles.json
+          cd artifact
+          sha256sum * > BUILD-SHA256SUMS
+
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wext-only-control-error-${{ github.run_number }}
+          path: |
+            build-error.log
+            build-wext-only.log.gz
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload WEXT-only recovery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: N60Pro-25.12.1-WEXT-ONLY-RECOVERY-CONTROL
+          path: artifact/*
+          if-no-files-found: error
+          retention-days: 14
