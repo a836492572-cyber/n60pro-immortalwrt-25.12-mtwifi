@@ -27,21 +27,30 @@ for pat in '*5202*' '*5203*' '*5204*'; do
 done
 
 mkdir -p "$SOURCE/$(dirname "$WEXT_PATCH")"
-cat > "$SOURCE/$WEXT_PATCH" <<'PATCH'
+sed -e 's/@TAB@/\t/g' -e 's/^ @EMPTY@$/ /' > "$SOURCE/$WEXT_PATCH" <<'PATCH'
 --- a/net/wireless/Kconfig
 +++ b/net/wireless/Kconfig
-@@ -214,2 +214,2 @@
+@@ -1,6 +1,6 @@
+ # SPDX-License-Identifier: GPL-2.0-only
  config WIRELESS_EXT
--	bool
+-@TAB@bool
 +	bool "Wireless extensions"
-@@ -226,2 +226,2 @@
+ @EMPTY@
+ config WEXT_CORE
+ @TAB@def_bool y
+@@ -12,10 +12,10 @@ config WEXT_PROC
+ @TAB@depends on WEXT_CORE
+ @EMPTY@
  config WEXT_SPY
--	bool
+-@TAB@bool
 +	bool "WEXT_SPY"
-@@ -229,2 +229,2 @@
+ @EMPTY@
  config WEXT_PRIV
--	bool
+-@TAB@bool
 +	bool "WEXT_PRIV"
+ @EMPTY@
+ config CFG80211
+ @TAB@tristate "cfg80211 - wireless configuration API"
 PATCH
 grep -Eq 'WIRELESS_EXT|WEXT_CORE|WEXT_PRIV|WEXT_PROC|WEXT_SPY' "$SOURCE/$WEXT_PATCH"
 ! grep -Eq 'LIB80211' "$SOURCE/$WEXT_PATCH"
