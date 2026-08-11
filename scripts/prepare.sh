@@ -28,7 +28,8 @@ for rel in \
   rsync -a "$DONOR/$rel/" "$SOURCE/$rel/"
 done
 
-# Proprietary mt_wifi runs without donor WARP/HNAT. Keep official Ethernet,
+# 当前诊断阶段暂不引入 donor WARP/HNAT；最终产品需要保留/恢复硬件加速能力。
+# Keep official Ethernet,
 # DSA, PHY, WED and PPE untouched.
 MT_WIFI_MAKEFILE="$SOURCE/package/mtk/drivers/mt_wifi/Makefile"
 python3 - "$MT_WIFI_MAKEFILE" <<'PY'
@@ -137,6 +138,38 @@ cat > "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-
 +obj-m += mtk_wifi_utility.o
 +mtk_wifi_utility-y := mt_wifi_mtd.o mt_wifi_of.o mt_wifi_eeprom.o pci_mediatek_rbus.o
 PATCH
+python3 - "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch" <<'PY'
+from pathlib import Path
+import sys
+
+patch = Path(sys.argv[1])
+patch.write_text(patch.read_text() + (
+    "--- a/drivers/net/wireless/wifi_utility/pci_mediatek_rbus.c\n"
+    "+++ b/drivers/net/wireless/wifi_utility/pci_mediatek_rbus.c\n"
+    "@@ -293,6 +293,7 @@ static int rbus_probe(struct platform_device *pdev)\n"
+    " {\n"
+    " \tstruct device_node *node = NULL;\n"
+    " \tstruct rbus_dev *rbus;\n"
+    "+\tint ret;\n"
+    " \n"
+    " \tnode = of_find_compatible_node(NULL, NULL, OF_RBUS_NAME);\n"
+    " \tif (!node)\n"
+    "@@ -318,8 +319,11 @@ static int rbus_probe(struct platform_device *pdev)\n"
+    " \t/*init config, need run before add port*/\n"
+    " \trbus_init_config(rbus);\n"
+    " \t/*add pci bus & device*/\n"
+    "-\trbus_add_port(rbus, pdev);\n"
+    "-\treturn -ENODEV;\n"
+    "+\tret = rbus_add_port(rbus, pdev);\n"
+    "+\tif (ret)\n"
+    "+\t\treturn ret;\n"
+    "+\n"
+    "+\treturn 0;\n"
+    " }\n"
+    " \n"
+    " /*\n"
+))
+PY
 
 # Package the module produced by the kernel's normal modules pass.
 WIFI_PKG="$SOURCE/package/mtk/drivers/wifi_utility"
@@ -406,8 +439,16 @@ grep -q '/lib/netifd/wireless/mac80211.sh' "$WIFI_SCRIPTS_HACK"
 grep -q 'mv "$MAC80211_SCRIPT"' "$WIFI_SCRIPTS_HACK"
 test ! -f "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5200-mtk-add-wifi-utility-rbus.patch"
 grep -q '^+obj-m += mtk_wifi_utility.o$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
+grep -Eq '^\+[[:space:]]+ret = rbus_add_port\(rbus, pdev\);$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
+grep -Eq '^\+[[:space:]]+if \(ret\)$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
+grep -Eq '^\+[[:space:]]+return ret;$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
+grep -Eq '^\+[[:space:]]+return 0;$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
 grep -q 'DEPENDS:=+kmod-mt-wifi-utility' "$CONNINFRA_MAKEFILE"
 grep -q '^CONFIG_PACKAGE_kmod-mt-wifi-utility=y$' "$SOURCE/.config"
+grep -q '^CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0$' "$SOURCE/.config"
+! grep -Eq '^CONFIG_PACKAGE_kmod-mt7915e=(y|m)$' "$SOURCE/.config"
+! grep -Eq '^CONFIG_PACKAGE_kmod-mt7986-firmware=(y|m)$' "$SOURCE/.config"
+! grep -Eq '^CONFIG_PACKAGE_mt7986-wo-firmware=(y|m)$' "$SOURCE/.config"
 for sym in WIRELESS_EXT WEXT_CORE WEXT_PRIV WEXT_PROC WEXT_SPY; do
   grep -qx "CONFIG_${sym}=y" "$GENERIC_CONFIG"
 done

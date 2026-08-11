@@ -1,6 +1,6 @@
 # Codex Context — N60 Pro
 
-Updated: 2026-08-09
+Updated: 2026-08-11
 
 Read `AGENTS.md` and `docs/BUILD_GATE.md` before using this file. Those two files contain the permanent process rules; this file records current technical state and proven/disproven facts.
 
@@ -20,9 +20,11 @@ Read `AGENTS.md` and `docs/BUILD_GATE.md` before using this file. Those two file
 - NMBM is not categorically forbidden or required; never change it from assumption alone.
 
 ## Final firmware target — hard requirements
+- Final product principle: preserve official ImmortalWrt 25.12.1 behavior wherever possible; add only the N60 Pro high-power proprietary 237 Wi-Fi/RF path; keep the required 2 GiB RAM, 512 MiB SPI-NAND, and WildEdition MAX 506.5 MiB hardware adaptation.
+- WARP/HNAT/WHNAT/Fast-NAT disabled is the current diagnostic-phase state, not a permanent final-product goal.
 - Official ImmortalWrt 25.12.1 commit: `a3378d1a2c15beb2faf4b0bce9c00f07143efa29`.
 - Linux 6.12 from that release.
-- Official N60 Pro Ethernet / PHY / DSA / switch / platform networking remains authoritative.
+- 官方 N60 Pro 网络实现是当前已真机验证的 known-good baseline；没有明确必要性和证据时保持，不整套导入 donor 网络基线。
 - MTK donor: `chasey-dev/immortalwrt-mt798x-rebase` commit `eb724bb94de346f36b35bdb0f7de31b529bbc885`.
 - Proprietary `mt_wifi` 7.6.7.3.
 - 237 radio source commit: `ec9ef10efc65da1e6d1de4e2c043c0e13d08eed8`.
@@ -35,6 +37,7 @@ CONFIG_MTK_CHIP_MT7986=y
 CONFIG_MTK_FIRST_IF_EEPROM_FLASH=y
 CONFIG_MTK_FIRST_IF_IPAILNA=y
 CONFIG_MTK_FIRST_IF_MT7986=y
+CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0
 CONFIG_MTK_WIFI_ADIE_TYPE="mt7976"
 CONFIG_MTK_WIFI_SKU_TYPE="AX6000"
 CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y
@@ -53,6 +56,7 @@ Required RF behavior:
 - `E2pAccessMode=2`
 - `SKUenable=0`
 - `TxPower=100`
+- first radio EEPROM offset is `0x0`
 - iPA/iLNA
 
 Required Linux 6.12 WEXT compatibility delta:
@@ -83,7 +87,9 @@ Official initramfs also boots correctly on this hardware with DHCP/LuCI/all LAN 
 - `wifi_utility` was modularized as `mtk_wifi_utility.ko` to avoid embedding it in vmlinux.
 - Initial module build hit unexported `__of_find_all_nodes`; code was changed to compatible-node iteration and later compiled.
 - Current diagnostic intent: install `mtk_wifi_utility`, `conninfra`, and `mt_wifi` but do NOT auto-load them.
-- If the system boots with LAN, load manually in this order and inspect after each: `mtk_wifi_utility` -> `conninfra` -> `mt_wifi`.
+- #38 real-device result: ITB recovery and classic BIN both booted successfully; SSH/Shell are available after system boot even though TTL is not currently usable.
+- #38 Wi-Fi diagnostic: manual `mtk_wifi_utility` load returned rc=255, but PCIe enumerated `14c3:7986`.
+- #38 RF evidence: `factory+0` is the actual EEPROM area; `factory+0xc0000` is erased, so N60 Pro RF offset must be `0x0`.
 
 ## Important no-repeat conclusions
 Do not repeat these experiments/theories without new direct evidence:
@@ -136,13 +142,25 @@ Do not repeat these experiments/theories without new direct evidence:
 - The compact failure artifact did NOT preserve enough context to honestly identify the real root package/fatal.
 - Do not patch based on ignored errors/configure probes from the truncated summary.
 
-### #33 — current run
+### #33
 - Head before governance-doc commits: `7a878d48b88a2186be47d1ab77f841aabb83c135`.
 - Run ID `31281536082`.
-- Purpose: CI diagnostic-only change that preserves the full `build-parallel.log.gz` on failure and larger matched-error context.
-- No firmware architecture/RF/DTS/autoload change in #33.
-- At the time this context was updated, #33 was still `in_progress`.
-- Do NOT push any file under `.github/workflows/**`, `scripts/**`, or `config/**` while #33 is active because the workflow uses `concurrency.cancel-in-progress: true` and those paths can launch a new run.
+- CI diagnostic-only change preserved the full `build-parallel.log.gz` on failure and larger matched-error context.
+
+### #35-#37
+- #35 restored the official release kernel package-to-Kconfig sidecar while keeping actual package build scope trimmed.
+- #36 collected the N60 Pro recovery ITB artifact.
+- WEXT-only recovery control booted on real hardware with DHCP and `192.168.1.1`, proving the five WEXT symbols themselves are not the boot failure cause.
+- #37 limited the main WEXT Kconfig patch to only the required WEXT prompt changes.
+
+### #38
+- Commit `9dbb1da7c4d3f1d09a6ccb63d6e0e73c38a3a5e1`.
+- Run ID `31449747534`.
+- Switched the MTK Wi-Fi frontend to pinned donor `mtwifi-cfg-ucode`.
+- Real-device result: both recovery ITB and classic BIN boot successfully.
+- Runtime access: TTL is not currently usable, but SSH/Shell are available after Linux boots.
+- Wi-Fi diagnostic result: manual `mtk_wifi_utility` load returned rc=255, while PCIe still enumerated `14c3:7986`.
+- EEPROM evidence: `factory+0` contains the actual radio EEPROM; `factory+0xc0000` is erased. The N60 Pro RF offset invariant is therefore `CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0`.
 
 ## Current repository workflow trigger fact
 `.github/workflows/build.yml` currently runs on push to `main` only when these paths change:
@@ -159,19 +177,10 @@ Permanent process is defined in:
 
 Key rule: one evidence-backed failure domain is analyzed broadly enough to find all cheap/static issues in that chain, then one coherent minimal batch is changed and prevalidated before one full Actions build. Do not use an "one small error -> one full build" loop.
 
-## Next technical action after #33 completes
-If #33 fails:
-1. fetch the full failure artifact;
-2. inspect/decompress `build-parallel.log.gz`;
-3. identify the first real unignored terminating error and its package/target;
-4. audit that entire failure domain for other static/cheap failures;
-5. only then prepare one coherent fix batch and run the build gate.
-
-If #33 succeeds:
-1. inspect the success artifact before flashing;
-2. verify 25.12.1, N60 Pro image, hashes/buildinfo/profile, trimmed build scope, proprietary requirements and disabled acceleration assumptions;
-3. then use the already-validated classic flashing route;
-4. first verify system/LAN with proprietary modules installed but not auto-loaded, then manually load `mtk_wifi_utility` -> `conninfra` -> `mt_wifi`.
+## Current technical action after #38
+- Keep boot/storage/network/frontend/WEXT/autoload strategy unchanged.
+- Fix only the confirmed Wi-Fi failure domain: RBUS probe module return behavior and RF EEPROM offset.
+- Do not modify 5203 EEPROM backend, DTS, conninfra, mt_wifi, frontend, boot/storage/network, or autoload strategy without new direct evidence.
 
 ## Files that normally matter
 - `AGENTS.md` — permanent project/Codex hard rules.

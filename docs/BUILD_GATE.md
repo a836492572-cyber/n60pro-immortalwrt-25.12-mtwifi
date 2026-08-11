@@ -5,6 +5,12 @@ This gate is mandatory before any push that can trigger the long GitHub Actions 
 ## Purpose
 The goal is to minimize Codex quota and multi-hour full-build iterations by moving every reasonable check before the integration build.
 
+## Final product principle
+- Preserve official ImmortalWrt 25.12.1 behavior wherever possible.
+- Add only the N60 Pro high-power proprietary 237 Wi-Fi/RF path on top of the official base.
+- Keep the required hardware adaptation: 2 GiB RAM, 512 MiB SPI-NAND, WildEdition MAX 506.5 MiB firmware area.
+- WARP/HNAT/WHNAT/Fast-NAT disabled is the current diagnostic-phase state, not a permanent final-product goal.
+
 ## Gate A — evidence and scope
 - [ ] The current failure domain/root cause is supported by logs, source, or a reproducible static fact; it is not a guess.
 - [ ] Existing project history and disproved theories in `docs/CODEX_CONTEXT.md` were reused instead of re-investigated blindly.
@@ -28,6 +34,7 @@ CONFIG_MTK_CHIP_MT7986=y
 CONFIG_MTK_FIRST_IF_EEPROM_FLASH=y
 CONFIG_MTK_FIRST_IF_IPAILNA=y
 CONFIG_MTK_FIRST_IF_MT7986=y
+CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0
 CONFIG_MTK_WIFI_ADIE_TYPE="mt7976"
 CONFIG_MTK_WIFI_SKU_TYPE="AX6000"
 CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y
@@ -47,6 +54,7 @@ Required RF behavior remains:
 - `SKUenable=0`
 - `TxPower=100`
 - iPA/iLNA
+- N60 Pro first radio EEPROM offset is `0x0`
 
 ## Gate D — Linux 6.12 compatibility invariants
 Only the required WEXT compatibility delta is allowed unless explicitly approved:
