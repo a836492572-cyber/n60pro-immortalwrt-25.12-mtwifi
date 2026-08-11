@@ -31,6 +31,8 @@ Required selections remain true:
 
 ```text
 CONFIG_MTK_CHIP_MT7986=y
+CONFIG_CONNINFRA_AUTO_UP=y
+CONFIG_CONNINFRA_EMI_SUPPORT=y
 CONFIG_MTK_FIRST_IF_EEPROM_FLASH=y
 CONFIG_MTK_FIRST_IF_IPAILNA=y
 CONFIG_MTK_FIRST_IF_MT7986=y
@@ -55,6 +57,12 @@ Required RF behavior remains:
 - `TxPower=100`
 - iPA/iLNA
 - N60 Pro first radio EEPROM offset is `0x0`
+
+#39 config lesson:
+- `mtk_wifi_utility` real-device manual load returned rc=0; RBUS and PCIe `14c3:7986` are verified [permanent].
+- Hidden mt_wifi Kconfig can re-resolve `CONFIG_MTK_RT_FIRST_IF_RF_OFFSET` to `0xc0000`; MT7986 must resolve to `0x0`.
+- Rebase must preserve `CONFIG_CONNINFRA_AUTO_UP=y` and `CONFIG_CONNINFRA_EMI_SUPPORT=y`.
+- Both final resolved `.config` and artifact `config.buildinfo` must gate these three symbols.
 
 ## Gate D — Linux 6.12 compatibility invariants
 Only the required WEXT compatibility delta is allowed unless explicitly approved:

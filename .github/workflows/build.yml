@@ -137,6 +137,9 @@ jobs:
           grep -qx 'CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y' .config
           grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_20260601=y' .config
           grep -qx 'CONFIG_MTK_FIRST_IF_IPAILNA=y' .config
+          grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' .config
+          grep -qx 'CONFIG_CONNINFRA_AUTO_UP=y' .config
+          grep -qx 'CONFIG_CONNINFRA_EMI_SUPPORT=y' .config
           ! grep -qx 'CONFIG_PACKAGE_kmod-warp=y' .config
           ! grep -qx 'CONFIG_PACKAGE_kmod-mediatek_hnat=y' .config
           ! grep -Eq '^CONFIG_MTK_FAST_NAT_SUPPORT=(y|m)$' .config
@@ -185,6 +188,10 @@ jobs:
           test -n "$(find artifact -type f -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -print -quit)"
           grep -q '25.12.1' artifact/profiles.json
           ! grep -q '25.12-SNAPSHOT' artifact/profiles.json
+          test -f artifact/config.buildinfo
+          grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' artifact/config.buildinfo
+          grep -qx 'CONFIG_CONNINFRA_AUTO_UP=y' artifact/config.buildinfo
+          grep -qx 'CONFIG_CONNINFRA_EMI_SUPPORT=y' artifact/config.buildinfo
           cd artifact
           sha256sum * > BUILD-SHA256SUMS
 

@@ -53,6 +53,29 @@ for old, new in replacements:
 p.write_text(s)
 PY
 
+MT_WIFI_CONFIG_IN="$SOURCE/package/mtk/drivers/mt_wifi/config.in"
+python3 - "$MT_WIFI_CONFIG_IN" <<'PY'
+from pathlib import Path
+import sys
+
+p = Path(sys.argv[1])
+s = p.read_text()
+old = """config  MTK_RT_FIRST_IF_RF_OFFSET
+        hex
+        depends on ! MTK_FIRST_IF_NONE
+        default 0xc0000
+"""
+new = """config  MTK_RT_FIRST_IF_RF_OFFSET
+        hex
+        depends on ! MTK_FIRST_IF_NONE
+        default 0x0 if MTK_FIRST_IF_MT7986
+        default 0xc0000
+"""
+if s.count(old) != 1:
+    raise SystemExit(f'MTK_RT_FIRST_IF_RF_OFFSET config.in pattern count != 1: {s.count(old)}')
+p.write_text(s.replace(old, new, 1))
+PY
+
 # Legacy WEXT is the only intentional change to the official built-in wireless
 # kernel code. The proprietary driver still needs these hidden 6.12 symbols.
 WEXT_PATCH_DST="$SOURCE/target/linux/generic/hack-6.12/299-add-wext-kconfig.patch"
@@ -443,6 +466,8 @@ grep -Eq '^\+[[:space:]]+ret = rbus_add_port\(rbus, pdev\);$' "$SOURCE/target/li
 grep -Eq '^\+[[:space:]]+if \(ret\)$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
 grep -Eq '^\+[[:space:]]+return ret;$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
 grep -Eq '^\+[[:space:]]+return 0;$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
+grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0x0 if MTK_FIRST_IF_MT7986'
+grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0xc0000'
 grep -q 'DEPENDS:=+kmod-mt-wifi-utility' "$CONNINFRA_MAKEFILE"
 grep -q '^CONFIG_PACKAGE_kmod-mt-wifi-utility=y$' "$SOURCE/.config"
 grep -q '^CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0$' "$SOURCE/.config"

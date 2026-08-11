@@ -1,6 +1,6 @@
 # Codex Context — N60 Pro
 
-Updated: 2026-08-11
+Updated: 2026-08-12
 
 Read `AGENTS.md` and `docs/BUILD_GATE.md` before using this file. Those two files contain the permanent process rules; this file records current technical state and proven/disproven facts.
 
@@ -34,6 +34,8 @@ Read `AGENTS.md` and `docs/BUILD_GATE.md` before using this file. Those two file
 Required 237 selections:
 ```text
 CONFIG_MTK_CHIP_MT7986=y
+CONFIG_CONNINFRA_AUTO_UP=y
+CONFIG_CONNINFRA_EMI_SUPPORT=y
 CONFIG_MTK_FIRST_IF_EEPROM_FLASH=y
 CONFIG_MTK_FIRST_IF_IPAILNA=y
 CONFIG_MTK_FIRST_IF_MT7986=y
@@ -162,6 +164,13 @@ Do not repeat these experiments/theories without new direct evidence:
 - Wi-Fi diagnostic result: manual `mtk_wifi_utility` load returned rc=255, while PCIe still enumerated `14c3:7986`.
 - EEPROM evidence: `factory+0` contains the actual radio EEPROM; `factory+0xc0000` is erased. The N60 Pro RF offset invariant is therefore `CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0`.
 
+### #39
+- Run ID `31489250155`.
+- Real-device result: manual `mtk_wifi_utility` load returned rc=0; RBUS and PCIe `14c3:7986` are verified [permanent].
+- Artifact config exposed that hidden mt_wifi Kconfig re-resolved `CONFIG_MTK_RT_FIRST_IF_RF_OFFSET` to `0xc0000`; MT7986 must resolve to `0x0`.
+- Rebase also missed `CONFIG_CONNINFRA_AUTO_UP=y` and `CONFIG_CONNINFRA_EMI_SUPPORT=y`.
+- Both final resolved `.config` and artifact `config.buildinfo` must gate `CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0`, `CONFIG_CONNINFRA_AUTO_UP=y`, and `CONFIG_CONNINFRA_EMI_SUPPORT=y`.
+
 ## Current repository workflow trigger fact
 `.github/workflows/build.yml` currently runs on push to `main` only when these paths change:
 - `.github/workflows/build.yml`
@@ -177,9 +186,9 @@ Permanent process is defined in:
 
 Key rule: one evidence-backed failure domain is analyzed broadly enough to find all cheap/static issues in that chain, then one coherent minimal batch is changed and prevalidated before one full Actions build. Do not use an "one small error -> one full build" loop.
 
-## Current technical action after #38
+## Current technical action after #39
 - Keep boot/storage/network/frontend/WEXT/autoload strategy unchanged.
-- Fix only the confirmed Wi-Fi failure domain: RBUS probe module return behavior and RF EEPROM offset.
+- Fix only the confirmed config failure domain: hidden mt_wifi RF offset default and missing `CONFIG_CONNINFRA_*` rebase preservation.
 - Do not modify 5203 EEPROM backend, DTS, conninfra, mt_wifi, frontend, boot/storage/network, or autoload strategy without new direct evidence.
 
 ## Files that normally matter

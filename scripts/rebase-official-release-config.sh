@@ -106,6 +106,8 @@ exact = {
     'CONFIG_PACKAGE_kmod-mt-wifi-utility',
     'CONFIG_PACKAGE_kmod-warp',
     'CONFIG_PACKAGE_kmod-mediatek_hnat',
+    'CONFIG_CONNINFRA_AUTO_UP',
+    'CONFIG_CONNINFRA_EMI_SUPPORT',
 }
 out = []
 for line in lines:
@@ -118,7 +120,7 @@ p.write_text('\n'.join(out) + '\n')
 PY
 
 # Append only the proprietary Wi-Fi package/Kconfig selections from our fragment.
-grep -E '^(CONFIG_MTK_|# CONFIG_MTK_|CONFIG_first_card|CONFIG_PACKAGE_kmod-conninfra=|CONFIG_PACKAGE_kmod-mt_wifi=|CONFIG_PACKAGE_mtwifi-cfg-ucode=|# CONFIG_PACKAGE_iwinfo is not set|CONFIG_PACKAGE_iwinfo-ucode=|CONFIG_PACKAGE_luci-app-mtwifi-cfg=|CONFIG_PACKAGE_luci-i18n-mtwifi-cfg-zh-cn=|# CONFIG_PACKAGE_kmod-warp is not set|# CONFIG_PACKAGE_kmod-mediatek_hnat is not set)' \
+grep -E '^(CONFIG_MTK_|# CONFIG_MTK_|CONFIG_CONNINFRA_AUTO_UP=|CONFIG_CONNINFRA_EMI_SUPPORT=|CONFIG_first_card|CONFIG_PACKAGE_kmod-conninfra=|CONFIG_PACKAGE_kmod-mt_wifi=|CONFIG_PACKAGE_mtwifi-cfg-ucode=|# CONFIG_PACKAGE_iwinfo is not set|CONFIG_PACKAGE_iwinfo-ucode=|CONFIG_PACKAGE_luci-app-mtwifi-cfg=|CONFIG_PACKAGE_luci-i18n-mtwifi-cfg-zh-cn=|# CONFIG_PACKAGE_kmod-warp is not set|# CONFIG_PACKAGE_kmod-mediatek_hnat is not set)' \
     "$BUILDER/config/n60pro-extra.config" >> "$SOURCE/.config"
 echo 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' >> "$SOURCE/.config"
 
@@ -140,6 +142,9 @@ done
 grep -qx 'CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' "$SOURCE/.config"
+grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' "$SOURCE/.config"
+grep -qx 'CONFIG_CONNINFRA_AUTO_UP=y' "$SOURCE/.config"
+grep -qx 'CONFIG_CONNINFRA_EMI_SUPPORT=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_mtwifi-cfg-ucode=y' "$SOURCE/.config"
 grep -qx '# CONFIG_PACKAGE_iwinfo is not set' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_iwinfo-ucode=y' "$SOURCE/.config"
