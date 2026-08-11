@@ -13,10 +13,19 @@ for rel in \
   drivers/mt_wifi \
   drivers/wifi-profile \
   applications/datconf \
-  applications/mtwifi-cfg \
+  applications/l1parser \
+  applications/mtwifi-cfg-ucode \
   applications/luci-app-mtwifi-cfg; do
   mkdir -p "$SOURCE/package/mtk/$(dirname "$rel")"
   rsync -a "$DONOR/package/mtk/$rel/" "$SOURCE/package/mtk/$rel/"
+done
+
+for rel in \
+  package/network/utils/iwinfo \
+  package/network/utils/iwinfo-ucode; do
+  rm -rf "$SOURCE/$rel"
+  mkdir -p "$(dirname "$SOURCE/$rel")"
+  rsync -a "$DONOR/$rel/" "$SOURCE/$rel/"
 done
 
 # Proprietary mt_wifi runs without donor WARP/HNAT. Keep official Ethernet,
@@ -179,10 +188,6 @@ if s.count(anchor) != 1:
 s = s.replace(anchor, insert, 1)
 p.write_text(s)
 PY
-
-# Classic Lua frontend used by 237.
-sed -i 's/LUCI_DEPENDS:=+mtwifi-cfg-ucode/LUCI_DEPENDS:=+mtwifi-cfg/' \
-  "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
 
 # Exact 237 MT7986 radio data only; no 237/donor Linux platform tree.
 PROFILE_DIR="$SOURCE/package/mtk/drivers/wifi-profile/files/mt7986"
@@ -387,7 +392,18 @@ grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
 ! grep -q 'ubi-volume-fit' "$DTS"
 grep -q 'compatible = "mediatek,wbsys", "mediatek,mt7986-wmac";' "$DTS"
 grep -q 'compatible = "mediatek,mt7986-consys";' "$DTS"
-grep -q '^LUCI_DEPENDS:=+mtwifi-cfg$' "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
+grep -q '^LUCI_DEPENDS:=+mtwifi-cfg-ucode$' "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
+test ! -e "$SOURCE/package/mtk/applications/mtwifi-cfg"
+test ! -f "$SOURCE/package/mtk/applications/mtwifi-cfg/files/netifd/mtwifi.sh"
+test "$(head -n 1 "$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/files/lib/netifd/wireless/mtwifi.sh")" = '#!/usr/bin/ucode'
+grep -q '+iwinfo-ucode' "$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/Makefile"
+grep -q '@!PACKAGE_iwinfo' "$SOURCE/package/network/utils/iwinfo-ucode/Makefile"
+grep -q 'BACKENDS="nl80211 mtk"' "$SOURCE/package/network/utils/iwinfo/Makefile"
+grep -q '+libl1parser' "$SOURCE/package/network/utils/iwinfo/Makefile"
+WIFI_SCRIPTS_HACK="$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/files/etc/uci-defaults/99-hack-wifi-scripts"
+test -f "$WIFI_SCRIPTS_HACK"
+grep -q '/lib/netifd/wireless/mac80211.sh' "$WIFI_SCRIPTS_HACK"
+grep -q 'mv "$MAC80211_SCRIPT"' "$WIFI_SCRIPTS_HACK"
 test ! -f "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5200-mtk-add-wifi-utility-rbus.patch"
 grep -q '^+obj-m += mtk_wifi_utility.o$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
 grep -q 'DEPENDS:=+kmod-mt-wifi-utility' "$CONNINFRA_MAKEFILE"
