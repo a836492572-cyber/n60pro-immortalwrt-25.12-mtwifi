@@ -207,8 +207,14 @@ jobs:
           test ! -e "$ROOTFS/etc/modules-boot.d/11-mt_wifi"
           ! grep -R -E 'mtk_warp_proxy|mtk_warp' "$ROOTFS/etc/modules.d"
           ! find "$ROOTFS/lib/modules" -type f -name 'mtk_warp_proxy.ko' | grep -q .
-          grep -qx 'INDEX0_EEPROM_offset=0x0' "$ROOTFS/etc/wireless/mediatek/l1profile.dat"
-          grep -qx 'INDEX0_EEPROM_size=0x5000' "$ROOTFS/etc/wireless/mediatek/l1profile.dat"
+          L1PROFILE="$ROOTFS/etc/wireless/l1profile.dat"
+          test -f "$L1PROFILE"
+          grep -qx 'INDEX0_EEPROM_offset=0x0' "$L1PROFILE"
+          grep -qx 'INDEX0_EEPROM_size=0x5000' "$L1PROFILE"
+          test -f "$ROOTFS/etc/wireless/mediatek/mt7986-ax6000.dbdc.b0.dat"
+          test -f "$ROOTFS/etc/wireless/mediatek/mt7986-ax6000.dbdc.b1.dat"
+          test -f "$ROOTFS/etc/wireless/mediatek/mt7986-sku.dat"
+          test -f "$ROOTFS/etc/wireless/mediatek/mt7986-sku-bf.dat"
           cd artifact
           sha256sum * > BUILD-SHA256SUMS
 
