@@ -55,7 +55,11 @@ The final firmware should differ from official ImmortalWrt 25.12.1 only where re
 
 ## Required proprietary Wi-Fi / compatibility state
 Keep the required 237-related selections and Linux 6.12 WEXT compatibility documented in `docs/BUILD_GATE.md` intact unless ChatGPT explicitly changes architecture.
-During the current diagnostic phase, `mtk_wifi_utility`, `conninfra`, and `mt_wifi` must remain installed but not auto-loaded.
+- `mtk_wifi_utility`: autoload order 09.
+- `conninfra`: autoload order 10.
+- `mt_wifi`: autoload order 11.
+- #42 real-device autoload PASS.
+- Do not disable or restructure autoload again without new evidence.
 
 ## Mandatory workflow
 1. Start with `git status --short`.
@@ -90,7 +94,7 @@ At minimum, when applicable:
 - verify 237 RF guard rails remain
 - verify required WEXT compatibility remains exactly scoped
 - verify proprietary module/package dependencies and known kernel-symbol requirements
-- verify no-autoload diagnostic state when that phase is active
+- verify #42 autoload state remains `mtk_wifi_utility` 09, `conninfra` 10, and `mt_wifi` 11
 - verify WARP/HNAT/WHNAT/Fast-NAT remain disabled
 - verify only the intended files changed
 

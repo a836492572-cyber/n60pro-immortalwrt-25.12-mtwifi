@@ -204,6 +204,14 @@ Key rule: one evidence-backed failure domain is analyzed broadly enough to find 
 - Keep boot/storage/network/WEXT/RF/EEPROM/backend/DTS unchanged.
 - Keep WARP/HNAT/WHNAT/Fast-NAT isolated for this diagnostic phase; do not restore acceleration without a later explicit architecture decision.
 
+## Post-#42 Golden firmware-only A/B candidate
+- #42 does not reopen #41 autoload; that domain is treated as PASS.
+- Current `mt_wifi` 7.6.7.3 + `mt7986-fw-20260601` measured 2.4 GHz / 5 GHz power as raw `44` / `45`.
+- Golden 237 `mt_wifi` 7.6.6.1 bundled rebb firmware measured 2.4 GHz / 5 GHz power as raw `50` / `48`.
+- TX-power command/event ABI between 7.6.6.1 and 7.6.7.3 was audited as compatible for a firmware-only A/B.
+- This Post-#42 Golden firmware-only A/B candidate keeps the 7.6.7.3 host driver and changes only the MT7986 firmware blobs to Golden 7.6.6.1 bundled rebb files.
+- This is not a final firmware decision; the result is decided by real-device testing.
+
 ## Files that normally matter
 - `AGENTS.md` — permanent project/Codex hard rules.
 - `docs/BUILD_GATE.md` — mandatory pre-build gate.

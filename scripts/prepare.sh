@@ -102,6 +102,72 @@ if s.count(old) != 1:
 p.write_text(s.replace(old, new, 1))
 PY
 
+python3 - "$MT_WIFI_CONFIG_IN" <<'PY'
+from pathlib import Path
+import sys
+
+p = Path(sys.argv[1])
+s = p.read_text()
+old_choice = """\tconfig MTK_MT_WIFI_MT7986_20260601
+\tbool \"mt7986-fw-20260601\"
+endchoice
+"""
+new_choice = """\tconfig MTK_MT_WIFI_MT7986_20260601
+\tbool \"mt7986-fw-20260601\"
+
+\tconfig MTK_MT_WIFI_MT7986_GOLDEN_7661
+\tbool \"mt7986-fw-golden-7661\"
+endchoice
+"""
+old_path = """\tdefault mt7986-fw-20250408 if MTK_MT_WIFI_MT7986_20250408
+\tdefault mt7986-fw-20260601 if MTK_MT_WIFI_MT7986_20260601
+"""
+new_path = """\tdefault mt7986-fw-20250408 if MTK_MT_WIFI_MT7986_20250408
+\tdefault mt7986-fw-20260601 if MTK_MT_WIFI_MT7986_20260601
+\tdefault mt7986-fw-golden-7661 if MTK_MT_WIFI_MT7986_GOLDEN_7661
+"""
+for old, new, name in (
+    (old_choice, new_choice, "MT7986 golden firmware choice"),
+    (old_path, new_path, "MT7986 golden firmware path"),
+):
+    if s.count(old) != 1:
+        raise SystemExit(f'{name} pattern count != 1: {s.count(old)}')
+    s = s.replace(old, new, 1)
+p.write_text(s)
+PY
+
+GOLDEN_FW_COMMIT="4c657c93546c86cd9f9d83cd5931b5056e652dbb"
+GOLDEN_FW_DIR="$SOURCE/package/mtk/drivers/mt_wifi/files/mt7986-fw-golden-7661"
+GOLDEN_FW_BASE="https://raw.githubusercontent.com/padavanonly/immortalwrt-mt798x-6.6/${GOLDEN_FW_COMMIT}/package/mtk/drivers/mt_wifi/src/bin/mt7986/rebb"
+rm -rf "$GOLDEN_FW_DIR"
+mkdir -p "$GOLDEN_FW_DIR"
+for f in \
+  7986_WACPU_RAM_CODE_release.bin \
+  WIFI_RAM_CODE_MT7986.bin \
+  WIFI_RAM_CODE_MT7986_MT7975.bin \
+  mt7986_patch_e1_hdr.bin \
+  mt7986_patch_e1_hdr_mt7975.bin; do
+  curl -fL --retry 5 --retry-delay 5 -o "$GOLDEN_FW_DIR/$f" "$GOLDEN_FW_BASE/$f"
+done
+(cd "$GOLDEN_FW_DIR" && sha256sum -c - <<'EOF'
+0237b7a6376d9f477d18cc54ffef153444098643d72b55942401cedbb6955c6a  7986_WACPU_RAM_CODE_release.bin
+d473692bb6856370cda487db9264a0eeb63af60e76c4dac23cc9bb90211e6bbb  WIFI_RAM_CODE_MT7986.bin
+3717fb957f3e4f1acdd2d8cc613c309345d189a2e341b00c904ade67a6092bd3  WIFI_RAM_CODE_MT7986_MT7975.bin
+2f593cf19b2b6b50c963bd94c8d5a3838e3d9681527c200f496e4899a3144237  mt7986_patch_e1_hdr.bin
+0a1492b0d36a31556bbf951ab1ff3e7d372a5e50866f0efd12e9908cacc793c1  mt7986_patch_e1_hdr_mt7975.bin
+EOF
+)
+test "$(find "$GOLDEN_FW_DIR" -mindepth 1 -maxdepth 1 -print | wc -l)" = 5
+for f in \
+  7986_WACPU_RAM_CODE_release.bin \
+  WIFI_RAM_CODE_MT7986.bin \
+  WIFI_RAM_CODE_MT7986_MT7975.bin \
+  mt7986_patch_e1_hdr.bin \
+  mt7986_patch_e1_hdr_mt7975.bin; do
+  test -f "$GOLDEN_FW_DIR/$f"
+done
+test ! -e "$GOLDEN_FW_DIR/SHA256SUMS"
+
 # Legacy WEXT is the only intentional change to the official built-in wireless
 # kernel code. The proprietary driver still needs these hidden 6.12 symbols.
 WEXT_PATCH_DST="$SOURCE/target/linux/generic/hack-6.12/299-add-wext-kconfig.patch"
@@ -497,6 +563,8 @@ grep -Eq '^\+[[:space:]]+return ret;$' "$SOURCE/target/linux/mediatek/patches-6.
 grep -Eq '^\+[[:space:]]+return 0;$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
 grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0x0 if MTK_FIRST_IF_MT7986'
 grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0xc0000'
+grep -Eq '^[[:space:]]*config MTK_MT_WIFI_MT7986_GOLDEN_7661$' "$MT_WIFI_CONFIG_IN"
+grep -q 'default mt7986-fw-golden-7661 if MTK_MT_WIFI_MT7986_GOLDEN_7661' "$MT_WIFI_CONFIG_IN"
 grep -q 'DEPENDS:=+kmod-mt-wifi-utility' "$CONNINFRA_MAKEFILE"
 grep -Fq 'AUTOLOAD:=$(call AutoLoad,09,mtk_wifi_utility,1)' "$SOURCE/package/mtk/drivers/wifi_utility/Makefile"
 grep -Fq 'AUTOLOAD:=$(call AutoLoad,10,conninfra,1)' "$CONNINFRA_MAKEFILE"

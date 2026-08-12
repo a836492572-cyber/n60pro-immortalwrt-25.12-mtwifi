@@ -127,7 +127,9 @@ jobs:
           grep -qx 'CONFIG_PACKAGE_ucode-mod-l1parser=y' .config
           grep -qx 'CONFIG_PACKAGE_wifi-scripts=y' .config
           grep -qx 'CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y' .config
-          grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_20260601=y' .config
+          grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y' .config
+          grep -qx 'CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986="mt7986-fw-golden-7661"' .config
+          ! grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_20260601=y' .config
           grep -qx 'CONFIG_MTK_FIRST_IF_IPAILNA=y' .config
           grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' .config
           grep -qx 'CONFIG_CONNINFRA_AUTO_UP=y' .config
@@ -189,6 +191,9 @@ jobs:
           ! grep -q '25.12-SNAPSHOT' artifact/profiles.json
           test -f artifact/config.buildinfo
           grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' artifact/config.buildinfo
+          grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y' artifact/config.buildinfo
+          grep -qx 'CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986="mt7986-fw-golden-7661"' artifact/config.buildinfo
+          ! grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_20260601=y' artifact/config.buildinfo
           grep -qx 'CONFIG_CONNINFRA_AUTO_UP=y' artifact/config.buildinfo
           grep -qx 'CONFIG_CONNINFRA_EMI_SUPPORT=y' artifact/config.buildinfo
           grep -qx 'CONFIG_PACKAGE_wireless-tools=y' artifact/config.buildinfo
@@ -215,6 +220,25 @@ jobs:
           test -f "$ROOTFS/etc/wireless/mediatek/mt7986-ax6000.dbdc.b1.dat"
           test -f "$ROOTFS/etc/wireless/mediatek/mt7986-sku.dat"
           test -f "$ROOTFS/etc/wireless/mediatek/mt7986-sku-bf.dat"
+          GOLDEN_FW="$ROOTFS/lib/firmware"
+          for f in \
+            7986_WACPU_RAM_CODE_release.bin \
+            WIFI_RAM_CODE_MT7986.bin \
+            WIFI_RAM_CODE_MT7986_MT7975.bin \
+            mt7986_patch_e1_hdr.bin \
+            mt7986_patch_e1_hdr_mt7975.bin; do
+            test -f "$GOLDEN_FW/$f"
+          done
+          test ! -e "$ROOTFS/lib/firmware/SHA256SUMS"
+          cat > artifact/GOLDEN-FW-SHA256SUMS.expected <<'EOF'
+          0237b7a6376d9f477d18cc54ffef153444098643d72b55942401cedbb6955c6a  7986_WACPU_RAM_CODE_release.bin
+          d473692bb6856370cda487db9264a0eeb63af60e76c4dac23cc9bb90211e6bbb  WIFI_RAM_CODE_MT7986.bin
+          3717fb957f3e4f1acdd2d8cc613c309345d189a2e341b00c904ade67a6092bd3  WIFI_RAM_CODE_MT7986_MT7975.bin
+          2f593cf19b2b6b50c963bd94c8d5a3838e3d9681527c200f496e4899a3144237  mt7986_patch_e1_hdr.bin
+          0a1492b0d36a31556bbf951ab1ff3e7d372a5e50866f0efd12e9908cacc793c1  mt7986_patch_e1_hdr_mt7975.bin
+          EOF
+          sed -i 's/^[[:space:]]*//' artifact/GOLDEN-FW-SHA256SUMS.expected
+          (cd "$GOLDEN_FW" && sha256sum -c "$GITHUB_WORKSPACE/artifact/GOLDEN-FW-SHA256SUMS.expected")
           cd artifact
           sha256sum * > BUILD-SHA256SUMS
 
@@ -232,7 +256,7 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: N60Pro-25.12.1-OFFICIAL-KERNEL-MTWiFi-237-AUTOLOAD-DIAG
+          name: N60Pro-25.12.1-OFFICIAL-KERNEL-MTWiFi-7673-GOLDEN7661FW-AB
           path: artifact/*
           if-no-files-found: error
           retention-days: 14

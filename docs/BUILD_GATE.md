@@ -27,7 +27,7 @@ The goal is to minimize Codex quota and multi-hour full-build iterations by movi
 - [ ] Intended UBI/firmware area remains `0x0580000` + `0x1fa80000` unless the user explicitly changes it.
 
 ## Gate C — proprietary 237 Wi-Fi invariants
-Required selections remain true:
+Required baseline and diagnostic selections remain true:
 
 ```text
 CONFIG_MTK_CHIP_MT7986=y
@@ -40,8 +40,18 @@ CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0
 CONFIG_MTK_WIFI_ADIE_TYPE="mt7976"
 CONFIG_MTK_WIFI_SKU_TYPE="AX6000"
 CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y
-CONFIG_MTK_MT_WIFI_MT7986_20260601=y
+
+#42 verified baseline:
+7.6.7.3 + mt7986-fw-20260601
+
+Current diagnostic A/B:
+CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y
+CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y
+CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986="mt7986-fw-golden-7661"
+# CONFIG_MTK_MT_WIFI_MT7986_20260601 is not set
 ```
+
+The Golden firmware selection is a temporary firmware-only A/B, not a permanent final-product decision. Final firmware selection is decided by real-device 50/48 power, RSSI, and throughput results.
 
 Required RF profile files remain present:
 - `l1profile.dat`
