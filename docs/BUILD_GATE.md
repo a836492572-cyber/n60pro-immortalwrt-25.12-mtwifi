@@ -64,6 +64,13 @@ Required RF behavior remains:
 - Rebase must preserve `CONFIG_CONNINFRA_AUTO_UP=y` and `CONFIG_CONNINFRA_EMI_SUPPORT=y`.
 - Both final resolved `.config` and artifact `config.buildinfo` must gate these three symbols.
 
+#40 runtime lesson:
+- Manual module load chain `mtk_wifi_utility -> conninfra -> mt_wifi` returned rc=0 and restored both radios after `wifi down && wifi up`.
+- Dual-band AP, 2.4 GHz HE40, 5 GHz HE160, mobile DHCP/LuCI, WAN DHCP/default route/DNS, and Wi-Fi-client NAT to WAN Internet were verified on real hardware.
+- Reboot Wi-Fi failure is the current NOAUTOLOAD boot-order condition: netifd setup can run while `mt_wifi` is not yet available.
+- `iwpriv` is called by `mtwifi-cfg-ucode`; artifact must include `/usr/sbin/iwpriv`.
+- Observed `INDEX0_EEPROM_size=0x5000` with nvmem cell size `0x1000` and `copied=0x1000`; the compatibility layer zero-fills the requested buffer first, and #41 must not change EEPROM size/cell/backend without new evidence.
+
 ## Gate D — Linux 6.12 compatibility invariants
 Only the required WEXT compatibility delta is allowed unless explicitly approved:
 
@@ -79,7 +86,9 @@ CONFIG_WEXT_SPY=y
 - [ ] Known EEPROM symbol requirements are satisfied.
 - [ ] No known unresolved modpost/link/kernel-symbol error remains in the changed failure domain.
 - [ ] WARP/HNAT/WHNAT/Fast-NAT remain disabled.
-- [ ] During the current diagnostic phase, `mtk_wifi_utility`, `conninfra`, and `mt_wifi` are installed but not auto-loaded.
+- [ ] During the current diagnostic phase, only the proprietary base Wi-Fi modules are auto-loaded: `mtk_wifi_utility` boot autoload priority 09, `conninfra` boot autoload priority 10, and `mt_wifi` normal autoload priority 11.
+- [ ] `mt_wifi` must not be promoted into `modules-boot.d`; utility/conninfra keep donor boot-stage behavior, while `mt_wifi` only needs normal kmodloader availability before netifd wireless setup.
+- [ ] `mtwifi-cfg-ucode` depends on `wireless-tools`, and its temporary acceleration-isolation reload list does not reference `mtk_warp_proxy` or `mtk_warp`.
 
 ## Gate E — cheap validation completed
 Run only checks relevant to the change, but do every applicable cheap check before the full build:

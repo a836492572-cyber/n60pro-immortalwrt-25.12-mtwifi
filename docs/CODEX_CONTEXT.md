@@ -88,7 +88,7 @@ Official initramfs also boots correctly on this hardware with DHCP/LuCI/all LAN 
 - `conninfra` and `mt_wifi` directly require `mt_eeprom_read_wifi`; `mt_wifi` also uses `mt_eeprom_write_wifi`.
 - `wifi_utility` was modularized as `mtk_wifi_utility.ko` to avoid embedding it in vmlinux.
 - Initial module build hit unexported `__of_find_all_nodes`; code was changed to compatible-node iteration and later compiled.
-- Current diagnostic intent: install `mtk_wifi_utility`, `conninfra`, and `mt_wifi` but do NOT auto-load them.
+- Current diagnostic intent after #40: auto-load only the proprietary base chain `mtk_wifi_utility -> conninfra -> mt_wifi`; keep WARP/HNAT/WHNAT/Fast-NAT isolated.
 - #38 real-device result: ITB recovery and classic BIN both booted successfully; SSH/Shell are available after system boot even though TTL is not currently usable.
 - #38 Wi-Fi diagnostic: manual `mtk_wifi_utility` load returned rc=255, but PCIe enumerated `14c3:7986`.
 - #38 RF evidence: `factory+0` is the actual EEPROM area; `factory+0xc0000` is erased, so N60 Pro RF offset must be `0x0`.
@@ -171,6 +171,16 @@ Do not repeat these experiments/theories without new direct evidence:
 - Rebase also missed `CONFIG_CONNINFRA_AUTO_UP=y` and `CONFIG_CONNINFRA_EMI_SUPPORT=y`.
 - Both final resolved `.config` and artifact `config.buildinfo` must gate `CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0`, `CONFIG_CONNINFRA_AUTO_UP=y`, and `CONFIG_CONNINFRA_EMI_SUPPORT=y`.
 
+### #40
+- Real-device result: `mtk_wifi_utility.ko`, `conninfra.ko`, and `mt_wifi.ko` manual `insmod` all returned rc=0; the utility -> conninfra -> mt_wifi module chain is verified.
+- EEPROM factory offset 0 is valid: `eeFlashId=0x7986`, two A-dies were recognized as MT7975, and `ra0` / `rax0` received real MAC addresses.
+- After manual module load and `wifi down && wifi up`, both radios worked: 2.4 GHz HE40, 5 GHz HE160, mobile 2.4/5 GHz association, DHCP, and LuCI access passed.
+- WAN eth1/GPY211C passed on real hardware: carrier, DHCP/default route/DNS/router Internet, and Wi-Fi client -> LAN -> NAT/firewall -> WAN -> Internet.
+- Reboot Wi-Fi failure was traced to NOAUTOLOAD boot order: netifd setup can run while `mt_wifi` is unavailable, logging `[Driver] mt_wifi is buit-in. Install as kmod(s)!!`; manual module load plus `wifi down && wifi up` restores both radios.
+- Runtime observed `iwpriv` missing while `mtwifi-cfg-ucode` calls `iwpriv` for `KickStaRssiLow` and `AssocReqRssiThres`; `wireless-tools` must be included as the provider of `/usr/sbin/iwpriv`.
+- Runtime observed `INDEX0_EEPROM_size=0x5000` requesting len `0x5000` from a `0x1000` nvmem cell with `copied=0x1000`. The compatibility backend zero-fills first, and real Wi-Fi passed, so #41 does not change EEPROM size, DTS cell size, or the 5203 backend.
+- #41 still isolates WARP/HNAT/WHNAT/Fast-NAT. Limiting `mtwifi-cfg-ucode` reload to `mt_wifi` is a current compatibility/acceleration-isolation behavior, not a permanent decision to remove hardware acceleration; restoring WARP/HNAT later requires a separate dependency-chain audit.
+
 ## Current repository workflow trigger fact
 `.github/workflows/build.yml` currently runs on push to `main` only when these paths change:
 - `.github/workflows/build.yml`
@@ -186,10 +196,13 @@ Permanent process is defined in:
 
 Key rule: one evidence-backed failure domain is analyzed broadly enough to find all cheap/static issues in that chain, then one coherent minimal batch is changed and prevalidated before one full Actions build. Do not use an "one small error -> one full build" loop.
 
-## Current technical action after #39
-- Keep boot/storage/network/frontend/WEXT/autoload strategy unchanged.
-- Fix only the confirmed config failure domain: hidden mt_wifi RF offset default and missing `CONFIG_CONNINFRA_*` rebase preservation.
-- Do not modify 5203 EEPROM backend, DTS, conninfra, mt_wifi, frontend, boot/storage/network, or autoload strategy without new direct evidence.
+## Current technical action after #40
+- Fix only the confirmed proprietary Wi-Fi boot-order/frontend dependency domain for #41.
+- Auto-load only the proprietary base chain: `mtk_wifi_utility` boot autoload priority 09, `conninfra` boot autoload priority 10, and `mt_wifi` normal autoload priority 11.
+- `mt_wifi` must not be promoted into `modules-boot.d`; utility/conninfra keep donor boot-stage behavior, while `mt_wifi` only needs normal kmodloader availability before netifd wireless setup.
+- Add the missing `wireless-tools` runtime dependency for `mtwifi-cfg-ucode` so `/usr/sbin/iwpriv` is present.
+- Keep boot/storage/network/WEXT/RF/EEPROM/backend/DTS unchanged.
+- Keep WARP/HNAT/WHNAT/Fast-NAT isolated for this diagnostic phase; do not restore acceleration without a later explicit architecture decision.
 
 ## Files that normally matter
 - `AGENTS.md` — permanent project/Codex hard rules.

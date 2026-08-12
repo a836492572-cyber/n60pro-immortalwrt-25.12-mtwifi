@@ -44,13 +44,39 @@ replacements = [
     ("  FILES:=$(PKG_BUILD_DIR)/mt_wifi_ap/mt_wifi.ko \\\n\t$(PKG_BUILD_DIR)/mt_wifi/embedded/plug_in/warp_proxy/mtk_warp_proxy.ko\n",
      "  FILES:=$(PKG_BUILD_DIR)/mt_wifi_ap/mt_wifi.ko\n"),
     ("  AUTOLOAD:=$(call AutoProbe,mt_wifi mtk_warp_proxy)\n",
-     "  AUTOLOAD:=$(call AutoProbe,mt_wifi)\n"),
+     "  AUTOLOAD:=$(call AutoLoad,11,mt_wifi)\n"),
 ]
 for old, new in replacements:
     if s.count(old) != 1:
         raise SystemExit(f'mt_wifi Makefile pattern count != 1: {old!r}: {s.count(old)}')
     s = s.replace(old, new, 1)
 p.write_text(s)
+PY
+
+MTWIFI_UCODE_MAKEFILE="$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/Makefile"
+python3 - "$MTWIFI_UCODE_MAKEFILE" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+old = "  DEPENDS:=$(UCODE_DEPENDS) +wifi-scripts +iwinfo-ucode\n"
+new = "  DEPENDS:=$(UCODE_DEPENDS) +wifi-scripts +iwinfo-ucode +wireless-tools\n"
+if s.count(old) != 1:
+    raise SystemExit(f'mtwifi-cfg-ucode DEPENDS pattern count != 1: {s.count(old)}')
+p.write_text(s.replace(old, new, 1))
+PY
+
+MTWIFI_DRIVER_UC="$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc"
+python3 - "$MTWIFI_DRIVER_UC" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+old = 'const DRIVERS = ["mtk_warp_proxy", "mtk_warp", "mt_wifi"];\n'
+new = 'const DRIVERS = ["mt_wifi"];\n'
+if s.count(old) != 1:
+    raise SystemExit(f'mtwifi driver list pattern count != 1: {s.count(old)}')
+p.write_text(s.replace(old, new, 1))
 PY
 
 MT_WIFI_CONFIG_IN="$SOURCE/package/mtk/drivers/mt_wifi/config.in"
@@ -212,7 +238,7 @@ define KernelPackage/mt-wifi-utility
   SUBMENU:=Drivers
   TITLE:=MediaTek proprietary WiFi EEPROM/RBUS utility
   FILES:=$(LINUX_DIR)/drivers/net/wireless/wifi_utility/mtk_wifi_utility.ko
-  AUTOLOAD:=$(call AutoLoad,9,mtk_wifi_utility,1)
+  AUTOLOAD:=$(call AutoLoad,09,mtk_wifi_utility,1)
 endef
 
 define KernelPackage/mt-wifi-utility/description
@@ -453,6 +479,9 @@ test ! -e "$SOURCE/package/mtk/applications/mtwifi-cfg"
 test ! -f "$SOURCE/package/mtk/applications/mtwifi-cfg/files/netifd/mtwifi.sh"
 test "$(head -n 1 "$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/files/lib/netifd/wireless/mtwifi.sh")" = '#!/usr/bin/ucode'
 grep -q '+iwinfo-ucode' "$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/Makefile"
+grep -q '+wireless-tools' "$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/Makefile"
+grep -Fqx 'const DRIVERS = ["mt_wifi"];' "$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc"
+! grep -Eq 'mtk_warp_proxy|mtk_warp' "$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc"
 grep -q '@!PACKAGE_iwinfo' "$SOURCE/package/network/utils/iwinfo-ucode/Makefile"
 grep -q 'BACKENDS="nl80211 mtk"' "$SOURCE/package/network/utils/iwinfo/Makefile"
 grep -q '+libl1parser' "$SOURCE/package/network/utils/iwinfo/Makefile"
@@ -469,6 +498,12 @@ grep -Eq '^\+[[:space:]]+return 0;$' "$SOURCE/target/linux/mediatek/patches-6.12
 grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0x0 if MTK_FIRST_IF_MT7986'
 grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0xc0000'
 grep -q 'DEPENDS:=+kmod-mt-wifi-utility' "$CONNINFRA_MAKEFILE"
+grep -Fq 'AUTOLOAD:=$(call AutoLoad,09,mtk_wifi_utility,1)' "$SOURCE/package/mtk/drivers/wifi_utility/Makefile"
+grep -Fq 'AUTOLOAD:=$(call AutoLoad,10,conninfra,1)' "$CONNINFRA_MAKEFILE"
+grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi)' "$MT_WIFI_MAKEFILE"
+! grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi,' "$MT_WIFI_MAKEFILE"
+! grep -Eq 'AUTOLOAD:=.*mtk_warp_proxy' "$MT_WIFI_MAKEFILE"
+! grep -Eq 'AUTOLOAD:=.*mtk_warp' "$MT_WIFI_MAKEFILE"
 grep -q '^CONFIG_PACKAGE_kmod-mt-wifi-utility=y$' "$SOURCE/.config"
 grep -q '^CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0$' "$SOURCE/.config"
 ! grep -Eq '^CONFIG_PACKAGE_kmod-mt7915e=(y|m)$' "$SOURCE/.config"

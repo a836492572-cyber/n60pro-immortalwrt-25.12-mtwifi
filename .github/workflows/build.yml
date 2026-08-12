@@ -69,15 +69,6 @@ jobs:
           bash ./scripts/prepare.sh "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/mtk-donor" "$GITHUB_WORKSPACE"
           bash ./scripts/fix-wifi-utility-module.sh "$GITHUB_WORKSPACE/source"
 
-      - name: Keep proprietary WiFi installed but not autoloaded for diagnostic 27
-        run: |
-          sed -i '/AUTOLOAD:=.*mt_wifi/d' source/package/mtk/drivers/mt_wifi/Makefile
-          sed -i '/AUTOLOAD:=.*conninfra/d' source/package/mtk/drivers/conninfra/Makefile
-          sed -i '/AUTOLOAD:=.*mtk_wifi_utility/d' source/package/mtk/drivers/wifi_utility/Makefile
-          ! grep -q 'AUTOLOAD:=.*mt_wifi' source/package/mtk/drivers/mt_wifi/Makefile
-          ! grep -q 'AUTOLOAD:=.*conninfra' source/package/mtk/drivers/conninfra/Makefile
-          ! grep -q 'AUTOLOAD:=.*mtk_wifi_utility' source/package/mtk/drivers/wifi_utility/Makefile
-
       - name: Update feeds
         working-directory: source
         run: |
@@ -129,6 +120,7 @@ jobs:
           grep -qx 'CONFIG_PACKAGE_kmod-mt_wifi=y' .config
           grep -qx 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' .config
           grep -qx 'CONFIG_PACKAGE_mtwifi-cfg-ucode=y' .config
+          grep -qx 'CONFIG_PACKAGE_wireless-tools=y' .config
           grep -qx 'CONFIG_PACKAGE_iwinfo-ucode=y' .config
           grep -qx 'CONFIG_PACKAGE_ucode-mod-iwinfo=y' .config
           grep -qx 'CONFIG_PACKAGE_ucode-mod-datconf=y' .config
@@ -147,6 +139,13 @@ jobs:
           ! grep -Eq '^CONFIG_MTK_WARP_V2=(y|m)$' .config
           ! grep -Eq '^CONFIG_PACKAGE_iwinfo=(y|m)$' .config
           ! grep -Eq '^CONFIG_PACKAGE_mtwifi-cfg=(y|m)$' .config
+          grep -Fq 'AUTOLOAD:=$(call AutoLoad,09,mtk_wifi_utility,1)' package/mtk/drivers/wifi_utility/Makefile
+          grep -Fq 'AUTOLOAD:=$(call AutoLoad,10,conninfra,1)' package/mtk/drivers/conninfra/Makefile
+          grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi)' package/mtk/drivers/mt_wifi/Makefile
+          ! grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi,' package/mtk/drivers/mt_wifi/Makefile
+          grep -q '+wireless-tools' package/mtk/applications/mtwifi-cfg-ucode/Makefile
+          grep -Fqx 'const DRIVERS = ["mt_wifi"];' package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc
+          ! grep -Eq 'mtk_warp_proxy|mtk_warp' package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc
 
       - name: Download sources
         working-directory: source
@@ -192,6 +191,24 @@ jobs:
           grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' artifact/config.buildinfo
           grep -qx 'CONFIG_CONNINFRA_AUTO_UP=y' artifact/config.buildinfo
           grep -qx 'CONFIG_CONNINFRA_EMI_SUPPORT=y' artifact/config.buildinfo
+          grep -qx 'CONFIG_PACKAGE_wireless-tools=y' artifact/config.buildinfo
+          test -d source/build_dir/target-aarch64_cortex-a53_musl/root-mediatek
+          ROOTFS="$(realpath source/build_dir/target-aarch64_cortex-a53_musl/root-mediatek)"
+          test -f "$ROOTFS/usr/sbin/iwpriv"
+          test -x "$ROOTFS/usr/sbin/iwpriv"
+          test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mtk_wifi_utility.ko' -print -quit)"
+          test -n "$(find "$ROOTFS/lib/modules" -type f -name 'conninfra.ko' -print -quit)"
+          test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mt_wifi.ko' -print -quit)"
+          grep -qx 'mtk_wifi_utility' "$ROOTFS/etc/modules.d/09-mt-wifi-utility"
+          grep -qx 'conninfra' "$ROOTFS/etc/modules.d/10-conninfra"
+          grep -qx 'mt_wifi' "$ROOTFS/etc/modules.d/11-mt_wifi"
+          test -L "$ROOTFS/etc/modules-boot.d/09-mt-wifi-utility"
+          test -L "$ROOTFS/etc/modules-boot.d/10-conninfra"
+          test ! -e "$ROOTFS/etc/modules-boot.d/11-mt_wifi"
+          ! grep -R -E 'mtk_warp_proxy|mtk_warp' "$ROOTFS/etc/modules.d"
+          ! find "$ROOTFS/lib/modules" -type f -name 'mtk_warp_proxy.ko' | grep -q .
+          grep -qx 'INDEX0_EEPROM_offset=0x0' "$ROOTFS/etc/wireless/mediatek/l1profile.dat"
+          grep -qx 'INDEX0_EEPROM_size=0x5000' "$ROOTFS/etc/wireless/mediatek/l1profile.dat"
           cd artifact
           sha256sum * > BUILD-SHA256SUMS
 
@@ -209,7 +226,7 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: N60Pro-25.12.1-OFFICIAL-KERNEL-MTWiFi-237-NOAUTOLOAD-DIAG
+          name: N60Pro-25.12.1-OFFICIAL-KERNEL-MTWiFi-237-AUTOLOAD-DIAG
           path: artifact/*
           if-no-files-found: error
           retention-days: 14
