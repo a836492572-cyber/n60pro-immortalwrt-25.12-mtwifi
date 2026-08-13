@@ -50,13 +50,12 @@ done
 MT_WIFI_MAKEFILE="$SOURCE/package/mtk/drivers/mt_wifi/Makefile"
 MT_WIFI_GOLDEN_PATCH_DIR="$SOURCE/package/mtk/drivers/mt_wifi/patches"
 MT_WIFI_GOLDEN_OVERLAY_SRC="$BUILDER/ci/mt_wifi-golden-6.12-overlay"
-test -d "$MT_WIFI_GOLDEN_OVERLAY_SRC"
-for patch in \
-  100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
-  103-since-v5.6-remove-rt_os-h-kernel-version-check.patch \
-  109-remove-unused-tim-in-bn_lib.patch \
-  112-since-v6.12-fix-unaligned_h-not-found-error.patch \
-  113-since-v6.8-change-strlcpy-to-strscpy.patch \
+  test -d "$MT_WIFI_GOLDEN_OVERLAY_SRC"
+  for patch in \
+    100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
+    109-remove-unused-tim-in-bn_lib.patch \
+    112-since-v6.12-fix-unaligned_h-not-found-error.patch \
+    113-since-v6.8-change-strlcpy-to-strscpy.patch \
   114-fix-fortify-warning-1-cmm_wpa.patch \
   115-fix-fortify-warning-2-pmf.patch \
   116-fix-fortify-warning-3-sta-sanity-memmove-overflow.patch \
@@ -598,13 +597,12 @@ for patch in \
   021-add-roam-steering-setting.patch \
   022-fix-return-type.patch; do
   test -f "$MT_WIFI_GOLDEN_PATCH_DIR/$patch"
-done
-for patch in \
-  100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
-  103-since-v5.6-remove-rt_os-h-kernel-version-check.patch \
-  109-remove-unused-tim-in-bn_lib.patch \
-  112-since-v6.12-fix-unaligned_h-not-found-error.patch \
-  113-since-v6.8-change-strlcpy-to-strscpy.patch \
+  done
+  for patch in \
+    100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
+    109-remove-unused-tim-in-bn_lib.patch \
+    112-since-v6.12-fix-unaligned_h-not-found-error.patch \
+    113-since-v6.8-change-strlcpy-to-strscpy.patch \
   114-fix-fortify-warning-1-cmm_wpa.patch \
   115-fix-fortify-warning-2-pmf.patch \
   116-fix-fortify-warning-3-sta-sanity-memmove-overflow.patch \
