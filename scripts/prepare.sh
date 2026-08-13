@@ -379,6 +379,12 @@ old_fit_volume = '''
 \t\t\t\t};
 '''
 old_linux_ubi = '\t\t\t\tcompatible = "linux,ubi";\n'
+old_factory = '''\t\t\tpartition@180000 {
+\t\t\t\tlabel = "factory";
+'''
+new_factory = '''\t\t\tfactory: partition@180000 {
+\t\t\t\tlabel = "factory";
+'''
 old_wifi = '''&wifi {
 \tnvmem-cells = <&eeprom_factory_0>;
 \tnvmem-cell-names = "eeprom";
@@ -389,6 +395,7 @@ old_wifi = '''&wifi {
 new_wifi = '''&wifi {
 \tcompatible = "mediatek,wbsys", "mediatek,mt7986-wmac";
 \tchip_id = <0x7986>;
+\tmediatek,mtd-eeprom = <&factory 0x0>;
 \tnvmem-cells = <&eeprom_factory_0>;
 \tnvmem-cell-names = "eeprom";
 \tpinctrl-names = "default";
@@ -397,7 +404,7 @@ new_wifi = '''&wifi {
 };'''
 for name, old in [('RAM', old_mem), ('UBI', old_ubi), ('chosen', old_chosen),
                   ('fit-volume', old_fit_volume), ('linux,ubi', old_linux_ubi),
-                  ('wifi', old_wifi)]:
+                  ('factory-label', old_factory), ('wifi', old_wifi)]:
     if s.count(old) != 1:
         raise SystemExit(f'{name} pattern count != 1: {s.count(old)}')
 s = (s.replace(old_mem, new_mem, 1)
@@ -405,6 +412,7 @@ s = (s.replace(old_mem, new_mem, 1)
        .replace(old_chosen, new_chosen, 1)
        .replace(old_fit_volume, '\n', 1)
        .replace(old_linux_ubi, '', 1)
+       .replace(old_factory, new_factory, 1)
        .replace(old_wifi, new_wifi, 1))
 
 # Board-local overrides for conninfra; these are Wi-Fi-only and leave official
@@ -534,11 +542,19 @@ done
 grep -q 'led@3' "$DTS"
 grep -q 'reg = <0 0x40000000 0 0x80000000>;' "$DTS"
 grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
+grep -q 'factory: partition@180000' "$DTS"
+grep -A6 'factory: partition@180000' "$DTS" | grep -q 'label = "factory";'
+grep -A6 'factory: partition@180000' "$DTS" | grep -q 'reg = <0x180000 0x200000>;'
+grep -A4 'eeprom_factory_0: eeprom@0' "$DTS" | grep -q 'reg = <0x0 0x1000>;'
+! grep -A4 'eeprom_factory_0: eeprom@0' "$DTS" | grep -q 'reg = <0x0 0x5000>;'
 ! grep -q 'compatible = "linux,ubi"' "$DTS"
 ! grep -q 'root=/dev/fit0' "$DTS"
 ! grep -q 'rootdisk' "$DTS"
 ! grep -q 'ubi-volume-fit' "$DTS"
 grep -q 'compatible = "mediatek,wbsys", "mediatek,mt7986-wmac";' "$DTS"
+grep -q 'mediatek,mtd-eeprom = <&factory 0x0>;' "$DTS"
+grep -q 'nvmem-cells = <&eeprom_factory_0>;' "$DTS"
+grep -q 'nvmem-cell-names = "eeprom";' "$DTS"
 grep -q 'compatible = "mediatek,mt7986-consys";' "$DTS"
 grep -q '^LUCI_DEPENDS:=+mtwifi-cfg-ucode$' "$SOURCE/package/mtk/applications/luci-app-mtwifi-cfg/Makefile"
 test ! -e "$SOURCE/package/mtk/applications/mtwifi-cfg"

@@ -212,6 +212,18 @@ Key rule: one evidence-backed failure domain is analyzed broadly enough to find 
 - This Post-#42 Golden firmware-only A/B candidate keeps the 7.6.7.3 host driver and changes only the MT7986 firmware blobs to Golden 7.6.6.1 bundled rebb files.
 - This is not a final firmware decision; the result is decided by real-device testing.
 
+## Post-#43 RF calibration-path candidate
+- #43 Golden firmware-only A/B failed on real hardware: power remained raw `44` / `45`.
+- The Golden runtime firmware blobs were present in rootfs, so do not keep changing firmware for this failure.
+- Real-device logs again showed an EEPROM request of `0x5000`, while the official `eeprom_factory_0` nvmem cell provides only `0x1000` and `copied=0x1000`.
+- New real-device evidence shows factory `0x1000-0x4fff` is erased: non-FF bytes = `0`.
+- Current nvmem partial-read path is real EEPROM at `0x0000-0x0fff`, then synthetic `0x00` at `0x1000-0x4fff` due to zero-fill.
+- Raw factory MTD is real EEPROM at `0x0000-0x0fff`, then real erased `0xFF` at `0x1000-0x4fff`.
+- The Linux 6.12 `wifi_utility` backend zero-fills first, partially copies the nvmem cell, returns success, and therefore does not fall back to raw Factory MTD.
+- The current candidate uses N60 Pro `mediatek,mtd-eeprom = <&factory 0x0>;` to restore true factory byte semantics from factory offset `0x0`, including erased `0xFF`.
+- The official `0x1000` nvmem cell remains unchanged.
+- This is an RF calibration-path A/B, not a final root-cause judgment; the real-device target remains raw `50` / `48`.
+
 ## Files that normally matter
 - `AGENTS.md` — permanent project/Codex hard rules.
 - `docs/BUILD_GATE.md` — mandatory pre-build gate.

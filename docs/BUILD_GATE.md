@@ -53,6 +53,14 @@ CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986="mt7986-fw-golden-7661"
 
 The Golden firmware selection is a temporary firmware-only A/B, not a permanent final-product decision. Final firmware selection is decided by real-device 50/48 power, RSSI, and throughput results.
 
+#43 firmware-only A/B lesson:
+- Golden firmware-only A/B failed on real hardware: power remained raw `44` / `45`.
+- Runtime again showed an EEPROM request length of `0x5000`, while the official `eeprom_factory_0` nvmem cell is `0x1000`.
+- Current nvmem partial-read path: `0x0000-0x0fff` is real EEPROM, while `0x1000-0x4fff` becomes synthetic `0x00` due to zero-fill.
+- Raw factory MTD semantics: `0x0000-0x0fff` is real EEPROM, while `0x1000-0x4fff` is real erased `0xFF`; current evidence shows non-FF bytes in that range = `0`.
+- Current RF calibration-path candidate keeps the official `eeprom_factory_0` cell unchanged and adds only the N60 Pro `mediatek,mtd-eeprom = <&factory 0x0>;` path to restore true factory byte semantics from factory offset `0x0`, including erased `0xFF`.
+- This is not a final root-cause judgment; the real-device target remains raw `50` / `48`.
+
 Required RF profile files remain present:
 - `l1profile.dat`
 - `mt7986-ax6000.dbdc.b0.dat`
@@ -94,6 +102,9 @@ CONFIG_WEXT_SPY=y
 
 - [ ] `wifi_utility -> conninfra -> mt_wifi` package/module dependency chain is internally consistent.
 - [ ] Known EEPROM symbol requirements are satisfied.
+- [ ] N60 Pro DTS keeps `factory: partition@180000` at `reg = <0x180000 0x200000>;`.
+- [ ] N60 Pro DTS keeps `eeprom_factory_0: eeprom@0` at `reg = <0x0 0x1000>;` and does not expand it to `0x5000`.
+- [ ] N60 Pro DTS includes `mediatek,mtd-eeprom = <&factory 0x0>;` for the proprietary Wi-Fi calibration read path.
 - [ ] No known unresolved modpost/link/kernel-symbol error remains in the changed failure domain.
 - [ ] WARP/HNAT/WHNAT/Fast-NAT remain disabled.
 - [ ] During the current diagnostic phase, only the proprietary base Wi-Fi modules are auto-loaded: `mtk_wifi_utility` boot autoload priority 09, `conninfra` boot autoload priority 10, and `mt_wifi` normal autoload priority 11.

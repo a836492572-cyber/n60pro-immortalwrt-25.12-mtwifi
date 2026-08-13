@@ -148,6 +148,12 @@ jobs:
           grep -q '+wireless-tools' package/mtk/applications/mtwifi-cfg-ucode/Makefile
           grep -Fqx 'const DRIVERS = ["mt_wifi"];' package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc
           ! grep -Eq 'mtk_warp_proxy|mtk_warp' package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc
+          DTS="target/linux/mediatek/dts/mt7986a-netcore-n60-pro.dts"
+          grep -q 'factory: partition@180000' "$DTS"
+          grep -A6 'factory: partition@180000' "$DTS" | grep -q 'reg = <0x180000 0x200000>;'
+          grep -q 'mediatek,mtd-eeprom = <&factory 0x0>;' "$DTS"
+          grep -A4 'eeprom_factory_0: eeprom@0' "$DTS" | grep -q 'reg = <0x0 0x1000>;'
+          ! grep -A4 'eeprom_factory_0: eeprom@0' "$DTS" | grep -q 'reg = <0x0 0x5000>;'
 
       - name: Download sources
         working-directory: source
@@ -256,7 +262,7 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: N60Pro-25.12.1-OFFICIAL-KERNEL-MTWiFi-7673-GOLDEN7661FW-AB
+          name: N60Pro-25.12.1-OFFICIAL-KERNEL-MTWiFi-7673-GOLDEN7661FW-MTDEEPROM-AB
           path: artifact/*
           if-no-files-found: error
           retention-days: 14
