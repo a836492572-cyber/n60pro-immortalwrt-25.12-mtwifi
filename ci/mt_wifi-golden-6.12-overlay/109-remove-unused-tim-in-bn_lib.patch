@@ -4,15 +4,7 @@
  {
  	unsigned char *buf = NULL;
  	int ret = 0, bit, bytes, mask;
--	time_t tim;
+-	ktime_t tim;
  	UINT32 i;
  
  	if (bits == 0) {
-@@ -6424,7 +6423,6 @@ static int bnrand(int pseudorand, BIGNUM
- 	}
- 
- 	/* make a random number and set the top and bottom bits */
--	NdisGetSystemUpTime((ULONG *)(&tim));
- 
- 	for (i = 0; i < bytes; i++)
- 		buf[i] = randombyte();

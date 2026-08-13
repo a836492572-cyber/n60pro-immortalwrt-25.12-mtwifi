@@ -42,8 +42,9 @@ CONFIG_MTK_FIRST_IF_MT7986=y
 CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0
 CONFIG_MTK_WIFI_ADIE_TYPE="mt7976"
 CONFIG_MTK_WIFI_SKU_TYPE="AX6000"
-CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y
-CONFIG_MTK_MT_WIFI_MT7986_20260601=y
+CONFIG_MTK_MGMT_TXPWR_CTRL=y
+CONFIG_MTK_TPC_SUPPORT=y
+CONFIG_MTK_TXBF_SUPPORT=y
 ```
 
 Required RF files:
@@ -231,6 +232,15 @@ Key rule: one evidence-backed failure domain is analyzed broadly enough to find 
 - Golden RF source vs donor 7661 is not RF-different in the targeted RF-symbol files; observed differences are donor non-RF patches such as flash API, memory shrink, site survey/stainfo, and return-type cleanup.
 - Current candidate changes only host driver version from `CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y` to `CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y`, while keeping Golden firmware, raw factory MTD EEPROM, RF offset `0x0`, iPA/iLNA, autoload 09/10/11, WARP/HNAT isolation, official network DTS, and classic NAND/UBI boot unchanged.
 - 7661 needs the cumulative Linux 6.12 compatibility stack `022` through `035`, plus fortify/compile patches `037-1` through `037-4` and `038`. Behavioral patches `039` and `040` are intentionally not imported.
+
+## Post-#45 Golden exact RF enclave candidate
+- #45 donor 7.6.6.1 host + Golden firmware + raw factory MTD EEPROM changed real-device power to raw `46` / `42`.
+- #45 proves host-side environment affects TX power, but donor 7661 still does not reproduce the Golden raw `50` / `48`.
+- Closed for this candidate: firmware-only, nvmem partial zero-fill, EEPROM `0x1000` vs `0x5000`, FF vs 00, RF offset, SKU, Backoff, Thermal, PowerUp, ePAGain, profile hidden fields, and WARP/HNAT as RF root cause.
+- Current candidate replaces the active mt_wifi host identity with the Golden exact `package/mtk/drivers/mt_wifi/` subtree from `padavanonly/immortalwrt-mt798x-6.6` commit `4c657c93546c86cd9f9d83cd5931b5056e652dbb`.
+- The Golden exact package supplies `src/`, `patches/`, `files/`, `config.in`, `PKG_VERSION:=7.6.6.1-$(PKG_SUFFIX)`, native patches `002` through `022`, `files/fix-new-mcu-fw-api.patch`, and bundled `src/bin/mt7986/rebb` firmware.
+- The current local integration keeps official 25.12.1 / Linux 6.12 platform, Golden native patches first, and the required Linux 6.12 overlay renumbered as `100`, `103`, `109`, and `112` through `118`. Donor `101` printk, `102` stdarg, `104` prandom, `105` ioremap, `106` DMA direction, `107` pr_warning, `108` dma mask, `110` compound_dtor, and `111` dev_addr blockers are already covered by Golden native context.
+- This is an RF enclave experiment inside the current platform, not a final decision to select Linux 6.6 and not a permanent acceleration policy.
 
 ## Files that normally matter
 - `AGENTS.md` — permanent project/Codex hard rules.

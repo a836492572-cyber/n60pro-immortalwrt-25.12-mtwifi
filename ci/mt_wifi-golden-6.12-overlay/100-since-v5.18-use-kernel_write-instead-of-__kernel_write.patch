@@ -1,0 +1,42 @@
+--- a/mt_wifi/os/linux/rt_linux.c
++++ b/mt_wifi/os/linux/rt_linux.c
+@@ -1047,6 +1047,9 @@ int RtmpOSFileWrite(RTMP_OS_FD osfd, cha
+ {
+ #if (KERNEL_VERSION(4, 1, 0) > LINUX_VERSION_CODE)
+ 	return osfd->f_op->write(osfd, pDataPtr, (size_t) writeLen, &osfd->f_pos);
++#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
++	/* __kernel_write is a GPL symbol, we cant use it */
++	return kernel_write(osfd, pDataPtr, (size_t) writeLen, &osfd->f_pos);
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+ 	return __kernel_write(osfd, pDataPtr, (size_t) writeLen, &osfd->f_pos);
+ #elif (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE)
+@@ -2260,6 +2263,9 @@ VOID RtmpDrvAllMacPrint(
+ 			} else{
+ 				MTWF_DBG(NULL, DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR, "no file write method\n");
+ 			}
++#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
++			/* __kernel_write is a GPL symbol, we cant use it */
++			kernel_write(file_w, msg, strlen(msg), &file_w->f_pos);
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+ 			__kernel_write(file_w, msg, strlen(msg), &file_w->f_pos);
+ #elif (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE)
+@@ -2333,6 +2339,9 @@ VOID RtmpDrvAllE2PPrint(
+ 				} else{
+ 					MTWF_DBG(NULL, DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR, "no file write method\n");
+ 				}
++#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
++				/* __kernel_write is a GPL symbol, we cant use it */
++				kernel_write(file_w, msg, strlen(msg), &file_w->f_pos);
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+ 				__kernel_write(file_w, msg, strlen(msg), &file_w->f_pos);
+ #elif (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE)
+@@ -2389,6 +2398,9 @@ VOID RtmpDrvAllRFPrint(
+ 			} else{
+ 				MTWF_DBG(NULL, DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR, "no file write method\n");
+ 			}
++#elif (KERNEL_VERSION(5, 18, 0) <= LINUX_VERSION_CODE)
++			/* __kernel_write is a GPL symbol, we cant use it */
++			kernel_write(file_w, pBuf, BufLen, &file_w->f_pos);
+ #elif (KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE)
+ 			__kernel_write(file_w, pBuf, BufLen, &file_w->f_pos);
+ #elif (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE)

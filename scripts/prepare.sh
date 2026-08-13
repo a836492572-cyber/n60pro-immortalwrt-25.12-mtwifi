@@ -4,13 +4,14 @@ set -euo pipefail
 SOURCE="${1:?usage: prepare.sh <official-source> <mtk-donor> <builder-root>}"
 DONOR="${2:?usage: prepare.sh <official-source> <mtk-donor> <builder-root>}"
 BUILDER="${3:?usage: prepare.sh <official-source> <mtk-donor> <builder-root>}"
+GOLDEN_MT_WIFI_COMMIT="4c657c93546c86cd9f9d83cd5931b5056e652dbb"
+GOLDEN_MT_WIFI_REPO="https://github.com/padavanonly/immortalwrt-mt798x-6.6.git"
 
 # Official ImmortalWrt 25.12.1 stays the platform/kernel baseline. Import only
 # the proprietary MTK Wi-Fi userspace/out-of-tree modules required by N60 Pro.
 rm -rf "$SOURCE/package/mtk"
 for rel in \
   drivers/conninfra \
-  drivers/mt_wifi \
   drivers/wifi-profile \
   applications/datconf \
   applications/l1parser \
@@ -20,6 +21,22 @@ for rel in \
   rsync -a "$DONOR/package/mtk/$rel/" "$SOURCE/package/mtk/$rel/"
 done
 
+# The active mt_wifi host identity is the Golden exact 7.6.6.1 RF package, not
+# the donor 7661 archive. Fetch only the pinned subtree and fail on any drift.
+GOLDEN_MT_WIFI_WORK="$BUILDER/.golden-mt_wifi-exact"
+rm -rf "$GOLDEN_MT_WIFI_WORK"
+mkdir -p "$GOLDEN_MT_WIFI_WORK"
+git -C "$GOLDEN_MT_WIFI_WORK" init
+git -C "$GOLDEN_MT_WIFI_WORK" remote add origin "$GOLDEN_MT_WIFI_REPO"
+git -C "$GOLDEN_MT_WIFI_WORK" fetch --depth=1 origin "$GOLDEN_MT_WIFI_COMMIT"
+git -C "$GOLDEN_MT_WIFI_WORK" sparse-checkout init --cone
+git -C "$GOLDEN_MT_WIFI_WORK" sparse-checkout set package/mtk/drivers/mt_wifi
+git -C "$GOLDEN_MT_WIFI_WORK" checkout --detach FETCH_HEAD
+test "$(git -C "$GOLDEN_MT_WIFI_WORK" rev-parse HEAD)" = "$GOLDEN_MT_WIFI_COMMIT"
+rm -rf "$SOURCE/package/mtk/drivers/mt_wifi"
+mkdir -p "$SOURCE/package/mtk/drivers"
+rsync -a "$GOLDEN_MT_WIFI_WORK/package/mtk/drivers/mt_wifi/" "$SOURCE/package/mtk/drivers/mt_wifi/"
+
 for rel in \
   package/network/utils/iwinfo \
   package/network/utils/iwinfo-ucode; do
@@ -28,38 +45,30 @@ for rel in \
   rsync -a "$DONOR/$rel/" "$SOURCE/$rel/"
 done
 
-# 当前诊断阶段暂不引入 donor WARP/HNAT；最终产品需要保留/恢复硬件加速能力。
-# Keep official Ethernet,
-# DSA, PHY, WED and PPE untouched.
+# Current diagnostic stage does not import donor WARP/HNAT. Keep official
+# Ethernet, DSA, PHY, WED and PPE untouched.
 MT_WIFI_MAKEFILE="$SOURCE/package/mtk/drivers/mt_wifi/Makefile"
-MT_WIFI_7661_PATCH_DIR="$SOURCE/package/mtk/drivers/mt_wifi/patches-7661"
-MT_WIFI_7661_COMPAT_SRC="$BUILDER/ci/mt_wifi-patches-7661"
-test -d "$MT_WIFI_7661_COMPAT_SRC"
+MT_WIFI_GOLDEN_PATCH_DIR="$SOURCE/package/mtk/drivers/mt_wifi/patches"
+MT_WIFI_GOLDEN_OVERLAY_SRC="$BUILDER/ci/mt_wifi-golden-6.12-overlay"
+test -d "$MT_WIFI_GOLDEN_OVERLAY_SRC"
 for patch in \
-  022-since-v5.18-drop-deprecated-mm_segment_t-usages.patch \
-  023-since-v5.5-fix-printk-redefined-in-rt_linux.patch \
-  024-since-v5.16-fix-stdarg_h-not-found-error.patch \
-  025-since-v5.6-remove-rt_os-h-kernel-version-check.patch \
-  026-since-v6.1-replace-deprecated-prandom_u32-usage.patch \
-  027-since-v5.6-replace-deprecated-ioremap_nocache-usage.patch \
-  028-since-v5.18-replace-deprecated-PCI_DMA_FROMDEVICE-macro.patch \
-  029-since-v5.5-replace-deprecated-pr_warning-define.patch \
-  030-since-v5.18-replace-deprecated-pci_set_dma_mask-usage.patch \
-  031-remove-unused-and-deprecated-tim-in-bn_lib.patch \
-  032-since-v6.3-remove-deprecated-compound_dtor-in-printk.patch \
-  033-since-v5.17-replace-illegal-memmove-with-dev_addr_set.patch \
-  034-since-v6.12-fix-unaligned_h-not-found-error.patch \
-  035-since-v6.8-change-strlcpy-to-strscpy.patch \
-  037-fix-fortify-warning-1-cmm_wpa.patch \
-  037-fix-fortify-warning-2-pmf.patch \
-  037-fix-fortify-warning-3-sta-sanity-memmove-overflow.patch \
-  037-fix-fortify-warning-4-qos.patch \
-  038-fix-rrm-snprintf-read-overflow.patch; do
-  test -f "$MT_WIFI_7661_COMPAT_SRC/$patch"
-  install -m0644 "$MT_WIFI_7661_COMPAT_SRC/$patch" "$MT_WIFI_7661_PATCH_DIR/$patch"
+  100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
+  103-since-v5.6-remove-rt_os-h-kernel-version-check.patch \
+  109-remove-unused-tim-in-bn_lib.patch \
+  112-since-v6.12-fix-unaligned_h-not-found-error.patch \
+  113-since-v6.8-change-strlcpy-to-strscpy.patch \
+  114-fix-fortify-warning-1-cmm_wpa.patch \
+  115-fix-fortify-warning-2-pmf.patch \
+  116-fix-fortify-warning-3-sta-sanity-memmove-overflow.patch \
+  117-fix-fortify-warning-4-qos.patch \
+  118-fix-rrm-snprintf-read-overflow.patch; do
+  test -f "$MT_WIFI_GOLDEN_OVERLAY_SRC/$patch"
+  install -m0644 "$MT_WIFI_GOLDEN_OVERLAY_SRC/$patch" "$MT_WIFI_GOLDEN_PATCH_DIR/$patch"
 done
-test ! -e "$MT_WIFI_7661_PATCH_DIR/039-fix-qos-peer_vendor_spec_action-frame-check.patch"
-test ! -e "$MT_WIFI_7661_PATCH_DIR/040-ap_mgmt_assoc-dont-reject-oversized-supported-channels-ie.patch"
+test ! -e "$MT_WIFI_GOLDEN_PATCH_DIR/039-fix-qos-peer_vendor_spec_action-frame-check.patch"
+test ! -e "$MT_WIFI_GOLDEN_PATCH_DIR/040-ap_mgmt_assoc-dont-reject-oversized-supported-channels-ie.patch"
+test ! -e "$MT_WIFI_GOLDEN_PATCH_DIR/039-ap_mgmt_assoc-dont-reject-oversized-supported-channels-ie.patch"
+grep -qx 'PKG_VERSION:=7.6.6.1-$(PKG_SUFFIX)' "$MT_WIFI_MAKEFILE"
 python3 - "$MT_WIFI_MAKEFILE" <<'PY'
 from pathlib import Path
 import sys
@@ -67,8 +76,9 @@ p = Path(sys.argv[1])
 s = p.read_text()
 replacements = [
     ("PKG_BUILD_DEPENDS:=warp\n", ""),
-    ("  DEPENDS:=+wifi-dats +kmod-conninfra +kmod-mediatek_hnat +kmod-warp\n",
-     "  DEPENDS:=+wifi-dats +kmod-conninfra\n"),
+    ("  DEPENDS:=+wifi-dats\n  DEPENDS+=+kmod-conninfra\n  DEPENDS+=+kmod-mediatek_hnat\n",
+     "  DEPENDS:=+wifi-dats\n  DEPENDS+=+kmod-conninfra\n"),
+    ("  DEPENDS+=+kmod-warp\n", ""),
     ("  FILES:=$(PKG_BUILD_DIR)/mt_wifi_ap/mt_wifi.ko \\\n\t$(PKG_BUILD_DIR)/mt_wifi/embedded/plug_in/warp_proxy/mtk_warp_proxy.ko\n",
      "  FILES:=$(PKG_BUILD_DIR)/mt_wifi_ap/mt_wifi.ko\n"),
     ("  AUTOLOAD:=$(call AutoProbe,mt_wifi mtk_warp_proxy)\n",
@@ -130,53 +140,7 @@ if s.count(old) != 1:
 p.write_text(s.replace(old, new, 1))
 PY
 
-python3 - "$MT_WIFI_CONFIG_IN" <<'PY'
-from pathlib import Path
-import sys
-
-p = Path(sys.argv[1])
-s = p.read_text()
-old_choice = """\tconfig MTK_MT_WIFI_MT7986_20260601
-\tbool \"mt7986-fw-20260601\"
-endchoice
-"""
-new_choice = """\tconfig MTK_MT_WIFI_MT7986_20260601
-\tbool \"mt7986-fw-20260601\"
-
-\tconfig MTK_MT_WIFI_MT7986_GOLDEN_7661
-\tbool \"mt7986-fw-golden-7661\"
-endchoice
-"""
-old_path = """\tdefault mt7986-fw-20250408 if MTK_MT_WIFI_MT7986_20250408
-\tdefault mt7986-fw-20260601 if MTK_MT_WIFI_MT7986_20260601
-"""
-new_path = """\tdefault mt7986-fw-20250408 if MTK_MT_WIFI_MT7986_20250408
-\tdefault mt7986-fw-20260601 if MTK_MT_WIFI_MT7986_20260601
-\tdefault mt7986-fw-golden-7661 if MTK_MT_WIFI_MT7986_GOLDEN_7661
-"""
-for old, new, name in (
-    (old_choice, new_choice, "MT7986 golden firmware choice"),
-    (old_path, new_path, "MT7986 golden firmware path"),
-):
-    if s.count(old) != 1:
-        raise SystemExit(f'{name} pattern count != 1: {s.count(old)}')
-    s = s.replace(old, new, 1)
-p.write_text(s)
-PY
-
-GOLDEN_FW_COMMIT="4c657c93546c86cd9f9d83cd5931b5056e652dbb"
-GOLDEN_FW_DIR="$SOURCE/package/mtk/drivers/mt_wifi/files/mt7986-fw-golden-7661"
-GOLDEN_FW_BASE="https://raw.githubusercontent.com/padavanonly/immortalwrt-mt798x-6.6/${GOLDEN_FW_COMMIT}/package/mtk/drivers/mt_wifi/src/bin/mt7986/rebb"
-rm -rf "$GOLDEN_FW_DIR"
-mkdir -p "$GOLDEN_FW_DIR"
-for f in \
-  7986_WACPU_RAM_CODE_release.bin \
-  WIFI_RAM_CODE_MT7986.bin \
-  WIFI_RAM_CODE_MT7986_MT7975.bin \
-  mt7986_patch_e1_hdr.bin \
-  mt7986_patch_e1_hdr_mt7975.bin; do
-  curl -fL --retry 5 --retry-delay 5 -o "$GOLDEN_FW_DIR/$f" "$GOLDEN_FW_BASE/$f"
-done
+GOLDEN_FW_DIR="$SOURCE/package/mtk/drivers/mt_wifi/src/bin/mt7986/rebb"
 (cd "$GOLDEN_FW_DIR" && sha256sum -c - <<'EOF'
 0237b7a6376d9f477d18cc54ffef153444098643d72b55942401cedbb6955c6a  7986_WACPU_RAM_CODE_release.bin
 d473692bb6856370cda487db9264a0eeb63af60e76c4dac23cc9bb90211e6bbb  WIFI_RAM_CODE_MT7986.bin
@@ -185,7 +149,6 @@ d473692bb6856370cda487db9264a0eeb63af60e76c4dac23cc9bb90211e6bbb  WIFI_RAM_CODE_
 0a1492b0d36a31556bbf951ab1ff3e7d372a5e50866f0efd12e9908cacc793c1  mt7986_patch_e1_hdr_mt7975.bin
 EOF
 )
-test "$(find "$GOLDEN_FW_DIR" -mindepth 1 -maxdepth 1 -print | wc -l)" = 5
 for f in \
   7986_WACPU_RAM_CODE_release.bin \
   WIFI_RAM_CODE_MT7986.bin \
@@ -607,34 +570,50 @@ grep -Eq '^\+[[:space:]]+return ret;$' "$SOURCE/target/linux/mediatek/patches-6.
 grep -Eq '^\+[[:space:]]+return 0;$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
 grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0x0 if MTK_FIRST_IF_MT7986'
 grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0xc0000'
-grep -q '^CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y$' "$SOURCE/.config"
-grep -q '^# CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673 is not set$' "$SOURCE/.config"
-grep -Eq '^[[:space:]]*config MTK_MT_WIFI_MT7986_GOLDEN_7661$' "$MT_WIFI_CONFIG_IN"
-grep -q 'default mt7986-fw-golden-7661 if MTK_MT_WIFI_MT7986_GOLDEN_7661' "$MT_WIFI_CONFIG_IN"
+grep -q '^# CONFIG_MTK_MT7986_NEW_FW is not set$' "$SOURCE/.config"
+! grep -Eq '^CONFIG_MTK_MT_WIFI_DRIVER_VERSION_(7661|7673)=y$' "$SOURCE/.config"
+! grep -Eq '^CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y$' "$SOURCE/.config"
+! grep -Eq '^CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986=' "$SOURCE/.config"
+grep -qx 'PKG_VERSION:=7.6.6.1-$(PKG_SUFFIX)' "$MT_WIFI_MAKEFILE"
 for patch in \
-  022-since-v5.18-drop-deprecated-mm_segment_t-usages.patch \
-  023-since-v5.5-fix-printk-redefined-in-rt_linux.patch \
-  024-since-v5.16-fix-stdarg_h-not-found-error.patch \
-  025-since-v5.6-remove-rt_os-h-kernel-version-check.patch \
-  026-since-v6.1-replace-deprecated-prandom_u32-usage.patch \
-  027-since-v5.6-replace-deprecated-ioremap_nocache-usage.patch \
-  028-since-v5.18-replace-deprecated-PCI_DMA_FROMDEVICE-macro.patch \
-  029-since-v5.5-replace-deprecated-pr_warning-define.patch \
-  030-since-v5.18-replace-deprecated-pci_set_dma_mask-usage.patch \
-  031-remove-unused-and-deprecated-tim-in-bn_lib.patch \
-  032-since-v6.3-remove-deprecated-compound_dtor-in-printk.patch \
-  033-since-v5.17-replace-illegal-memmove-with-dev_addr_set.patch \
-  034-since-v6.12-fix-unaligned_h-not-found-error.patch \
-  035-since-v6.8-change-strlcpy-to-strscpy.patch \
-  037-fix-fortify-warning-1-cmm_wpa.patch \
-  037-fix-fortify-warning-2-pmf.patch \
-  037-fix-fortify-warning-3-sta-sanity-memmove-overflow.patch \
-  037-fix-fortify-warning-4-qos.patch \
-  038-fix-rrm-snprintf-read-overflow.patch; do
-  test -f "$MT_WIFI_7661_PATCH_DIR/$patch"
+  002-sort-site-survey-table.patch \
+  003-fix-rxrate-stainfo.patch \
+  004-remove-apcli-bgprotect-log.patch \
+  005-use-ext-warp-code.patch \
+  006-fix-stainfo_struct.patch \
+  007-fix-tx-phymode.patch \
+  008-fix-he-gi-stainfo.patch \
+  009-add-secinfo-to-stainfo.patch \
+  010-remove-addba-noisy-log.patch \
+  011-fix-wext-txpwr.patch \
+  012-add-mt7986-memory-shrink-aggress.patch \
+  013-add-rssi-for-sitesurvey.patch \
+  014-fix-iwrange.patch \
+  015-fix-apcli-stainfo.patch \
+  016-fix-apcli-scan-no-ascii-ssid.patch \
+  017-fix-secinfo-for-iwinfo.patch \
+  018-fix-he-max-bw.patch \
+  019-fix-vht-bw.patch \
+  020-wapp-btm--steering.patch \
+  021-add-roam-steering-setting.patch \
+  022-fix-return-type.patch; do
+  test -f "$MT_WIFI_GOLDEN_PATCH_DIR/$patch"
 done
-test ! -e "$MT_WIFI_7661_PATCH_DIR/039-fix-qos-peer_vendor_spec_action-frame-check.patch"
-test ! -e "$MT_WIFI_7661_PATCH_DIR/040-ap_mgmt_assoc-dont-reject-oversized-supported-channels-ie.patch"
+for patch in \
+  100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
+  103-since-v5.6-remove-rt_os-h-kernel-version-check.patch \
+  109-remove-unused-tim-in-bn_lib.patch \
+  112-since-v6.12-fix-unaligned_h-not-found-error.patch \
+  113-since-v6.8-change-strlcpy-to-strscpy.patch \
+  114-fix-fortify-warning-1-cmm_wpa.patch \
+  115-fix-fortify-warning-2-pmf.patch \
+  116-fix-fortify-warning-3-sta-sanity-memmove-overflow.patch \
+  117-fix-fortify-warning-4-qos.patch \
+  118-fix-rrm-snprintf-read-overflow.patch; do
+  test -f "$MT_WIFI_GOLDEN_PATCH_DIR/$patch"
+done
+test ! -e "$MT_WIFI_GOLDEN_PATCH_DIR/039-fix-qos-peer_vendor_spec_action-frame-check.patch"
+test ! -e "$MT_WIFI_GOLDEN_PATCH_DIR/040-ap_mgmt_assoc-dont-reject-oversized-supported-channels-ie.patch"
 grep -q 'DEPENDS:=+kmod-mt-wifi-utility' "$CONNINFRA_MAKEFILE"
 grep -Fq 'AUTOLOAD:=$(call AutoLoad,09,mtk_wifi_utility,1)' "$SOURCE/package/mtk/drivers/wifi_utility/Makefile"
 grep -Fq 'AUTOLOAD:=$(call AutoLoad,10,conninfra,1)' "$CONNINFRA_MAKEFILE"

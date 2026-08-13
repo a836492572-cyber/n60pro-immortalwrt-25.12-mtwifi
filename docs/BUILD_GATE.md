@@ -39,22 +39,23 @@ CONFIG_MTK_FIRST_IF_MT7986=y
 CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0
 CONFIG_MTK_WIFI_ADIE_TYPE="mt7976"
 CONFIG_MTK_WIFI_SKU_TYPE="AX6000"
-# Current host-driver A/B candidate uses:
-CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y
-# CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673 is not set
+CONFIG_MTK_MGMT_TXPWR_CTRL=y
+CONFIG_MTK_TPC_SUPPORT=y
+CONFIG_MTK_TXBF_SUPPORT=y
 
 #42 verified baseline:
 7.6.7.3 + mt7986-fw-20260601
 
-Post-#44 host-driver A/B candidate:
-CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y
-# CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673 is not set
-CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y
-CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986="mt7986-fw-golden-7661"
-# CONFIG_MTK_MT_WIFI_MT7986_20260601 is not set
+Post-#45 Golden exact RF enclave candidate:
+Golden exact `package/mtk/drivers/mt_wifi/` from
+`padavanonly/immortalwrt-mt798x-6.6`
+commit `4c657c93546c86cd9f9d83cd5931b5056e652dbb`.
+`PKG_VERSION:=7.6.6.1-$(PKG_SUFFIX)`
+Golden native patches `002` through `022` apply before the local Linux 6.12 overlay `100`, `103`, `109`, and `112` through `118`.
+# CONFIG_MTK_MT7986_NEW_FW is not set
 ```
 
-The current candidate is a temporary host-driver A/B, not a permanent final-product downgrade decision. Final host/firmware selection is decided by real-device 50/48 power, RSSI, and throughput results.
+The current candidate is a temporary Golden exact RF enclave inside the current official 25.12.1 / Linux 6.12 platform. It is not a final decision to select Linux 6.6, and WARP/HNAT/WHNAT/Fast-NAT disabled remains the current diagnostic isolation state rather than a permanent final-product policy. Final RF stack and acceleration selection are decided by real-device 50/48 power, RSSI, and throughput results.
 
 #43 firmware-only A/B lesson:
 - Golden firmware-only A/B failed on real hardware: power remained raw `44` / `45`.
@@ -68,7 +69,11 @@ The current candidate is a temporary host-driver A/B, not a permanent final-prod
 - Raw factory MTD EEPROM semantics were restored and runtime reads showed `e2p 0x1000`, `0x1002`, `0x2000`, and `0x4ffe` as `FFFF`.
 - High-power still failed on real hardware: power remained raw `44` / `45`.
 - Do not reopen firmware-only, nvmem partial zero-fill, EEPROM `0x1000` vs `0x5000`, RF offset, SKU, Backoff, Thermal, PowerUp, ePAGain, profile, WARP/HNAT for this candidate without new evidence.
-- The next candidate tests only Golden 7.6.6.1 host-side RF behavior on the same Linux 6.12 + Golden firmware + raw factory MTD EEPROM base.
+
+#45 donor 7661 host-driver A/B lesson:
+- Donor 7.6.6.1 host + Golden firmware + raw factory MTD EEPROM changed real-device power to raw `46` / `42`.
+- This proves host-side environment affects TX power, but donor 7661 does not reproduce the Golden raw `50` / `48`.
+- The next candidate uses the Golden exact vendored `mt_wifi` 7.6.6.1 package, Golden native patch stack, Golden bundled firmware, Golden RF Kconfig behavior, and only the required Linux 6.12 integration overlay.
 
 Required RF profile files remain present:
 - `l1profile.dat`
