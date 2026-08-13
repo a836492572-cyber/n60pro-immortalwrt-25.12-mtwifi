@@ -39,19 +39,22 @@ CONFIG_MTK_FIRST_IF_MT7986=y
 CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0
 CONFIG_MTK_WIFI_ADIE_TYPE="mt7976"
 CONFIG_MTK_WIFI_SKU_TYPE="AX6000"
-CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y
+# Current host-driver A/B candidate uses:
+CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y
+# CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673 is not set
 
 #42 verified baseline:
 7.6.7.3 + mt7986-fw-20260601
 
-Current diagnostic A/B:
-CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y
+Post-#44 host-driver A/B candidate:
+CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y
+# CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673 is not set
 CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y
 CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986="mt7986-fw-golden-7661"
 # CONFIG_MTK_MT_WIFI_MT7986_20260601 is not set
 ```
 
-The Golden firmware selection is a temporary firmware-only A/B, not a permanent final-product decision. Final firmware selection is decided by real-device 50/48 power, RSSI, and throughput results.
+The current candidate is a temporary host-driver A/B, not a permanent final-product downgrade decision. Final host/firmware selection is decided by real-device 50/48 power, RSSI, and throughput results.
 
 #43 firmware-only A/B lesson:
 - Golden firmware-only A/B failed on real hardware: power remained raw `44` / `45`.
@@ -60,6 +63,12 @@ The Golden firmware selection is a temporary firmware-only A/B, not a permanent 
 - Raw factory MTD semantics: `0x0000-0x0fff` is real EEPROM, while `0x1000-0x4fff` is real erased `0xFF`; current evidence shows non-FF bytes in that range = `0`.
 - Current RF calibration-path candidate keeps the official `eeprom_factory_0` cell unchanged and adds only the N60 Pro `mediatek,mtd-eeprom = <&factory 0x0>;` path to restore true factory byte semantics from factory offset `0x0`, including erased `0xFF`.
 - This is not a final root-cause judgment; the real-device target remains raw `50` / `48`.
+
+#44 MTD EEPROM semantics lesson:
+- Raw factory MTD EEPROM semantics were restored and runtime reads showed `e2p 0x1000`, `0x1002`, `0x2000`, and `0x4ffe` as `FFFF`.
+- High-power still failed on real hardware: power remained raw `44` / `45`.
+- Do not reopen firmware-only, nvmem partial zero-fill, EEPROM `0x1000` vs `0x5000`, RF offset, SKU, Backoff, Thermal, PowerUp, ePAGain, profile, WARP/HNAT for this candidate without new evidence.
+- The next candidate tests only Golden 7.6.6.1 host-side RF behavior on the same Linux 6.12 + Golden firmware + raw factory MTD EEPROM base.
 
 Required RF profile files remain present:
 - `l1profile.dat`

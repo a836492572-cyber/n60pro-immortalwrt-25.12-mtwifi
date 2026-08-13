@@ -32,6 +32,34 @@ done
 # Keep official Ethernet,
 # DSA, PHY, WED and PPE untouched.
 MT_WIFI_MAKEFILE="$SOURCE/package/mtk/drivers/mt_wifi/Makefile"
+MT_WIFI_7661_PATCH_DIR="$SOURCE/package/mtk/drivers/mt_wifi/patches-7661"
+MT_WIFI_7661_COMPAT_SRC="$BUILDER/ci/mt_wifi-patches-7661"
+test -d "$MT_WIFI_7661_COMPAT_SRC"
+for patch in \
+  022-since-v5.18-drop-deprecated-mm_segment_t-usages.patch \
+  023-since-v5.5-fix-printk-redefined-in-rt_linux.patch \
+  024-since-v5.16-fix-stdarg_h-not-found-error.patch \
+  025-since-v5.6-remove-rt_os-h-kernel-version-check.patch \
+  026-since-v6.1-replace-deprecated-prandom_u32-usage.patch \
+  027-since-v5.6-replace-deprecated-ioremap_nocache-usage.patch \
+  028-since-v5.18-replace-deprecated-PCI_DMA_FROMDEVICE-macro.patch \
+  029-since-v5.5-replace-deprecated-pr_warning-define.patch \
+  030-since-v5.18-replace-deprecated-pci_set_dma_mask-usage.patch \
+  031-remove-unused-and-deprecated-tim-in-bn_lib.patch \
+  032-since-v6.3-remove-deprecated-compound_dtor-in-printk.patch \
+  033-since-v5.17-replace-illegal-memmove-with-dev_addr_set.patch \
+  034-since-v6.12-fix-unaligned_h-not-found-error.patch \
+  035-since-v6.8-change-strlcpy-to-strscpy.patch \
+  037-fix-fortify-warning-1-cmm_wpa.patch \
+  037-fix-fortify-warning-2-pmf.patch \
+  037-fix-fortify-warning-3-sta-sanity-memmove-overflow.patch \
+  037-fix-fortify-warning-4-qos.patch \
+  038-fix-rrm-snprintf-read-overflow.patch; do
+  test -f "$MT_WIFI_7661_COMPAT_SRC/$patch"
+  install -m0644 "$MT_WIFI_7661_COMPAT_SRC/$patch" "$MT_WIFI_7661_PATCH_DIR/$patch"
+done
+test ! -e "$MT_WIFI_7661_PATCH_DIR/039-fix-qos-peer_vendor_spec_action-frame-check.patch"
+test ! -e "$MT_WIFI_7661_PATCH_DIR/040-ap_mgmt_assoc-dont-reject-oversized-supported-channels-ie.patch"
 python3 - "$MT_WIFI_MAKEFILE" <<'PY'
 from pathlib import Path
 import sys
@@ -579,8 +607,34 @@ grep -Eq '^\+[[:space:]]+return ret;$' "$SOURCE/target/linux/mediatek/patches-6.
 grep -Eq '^\+[[:space:]]+return 0;$' "$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5204-mtk-wifi-utility-build-as-module.patch"
 grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0x0 if MTK_FIRST_IF_MT7986'
 grep -A4 '^config  MTK_RT_FIRST_IF_RF_OFFSET$' "$MT_WIFI_CONFIG_IN" | grep -q 'default 0xc0000'
+grep -q '^CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y$' "$SOURCE/.config"
+grep -q '^# CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673 is not set$' "$SOURCE/.config"
 grep -Eq '^[[:space:]]*config MTK_MT_WIFI_MT7986_GOLDEN_7661$' "$MT_WIFI_CONFIG_IN"
 grep -q 'default mt7986-fw-golden-7661 if MTK_MT_WIFI_MT7986_GOLDEN_7661' "$MT_WIFI_CONFIG_IN"
+for patch in \
+  022-since-v5.18-drop-deprecated-mm_segment_t-usages.patch \
+  023-since-v5.5-fix-printk-redefined-in-rt_linux.patch \
+  024-since-v5.16-fix-stdarg_h-not-found-error.patch \
+  025-since-v5.6-remove-rt_os-h-kernel-version-check.patch \
+  026-since-v6.1-replace-deprecated-prandom_u32-usage.patch \
+  027-since-v5.6-replace-deprecated-ioremap_nocache-usage.patch \
+  028-since-v5.18-replace-deprecated-PCI_DMA_FROMDEVICE-macro.patch \
+  029-since-v5.5-replace-deprecated-pr_warning-define.patch \
+  030-since-v5.18-replace-deprecated-pci_set_dma_mask-usage.patch \
+  031-remove-unused-and-deprecated-tim-in-bn_lib.patch \
+  032-since-v6.3-remove-deprecated-compound_dtor-in-printk.patch \
+  033-since-v5.17-replace-illegal-memmove-with-dev_addr_set.patch \
+  034-since-v6.12-fix-unaligned_h-not-found-error.patch \
+  035-since-v6.8-change-strlcpy-to-strscpy.patch \
+  037-fix-fortify-warning-1-cmm_wpa.patch \
+  037-fix-fortify-warning-2-pmf.patch \
+  037-fix-fortify-warning-3-sta-sanity-memmove-overflow.patch \
+  037-fix-fortify-warning-4-qos.patch \
+  038-fix-rrm-snprintf-read-overflow.patch; do
+  test -f "$MT_WIFI_7661_PATCH_DIR/$patch"
+done
+test ! -e "$MT_WIFI_7661_PATCH_DIR/039-fix-qos-peer_vendor_spec_action-frame-check.patch"
+test ! -e "$MT_WIFI_7661_PATCH_DIR/040-ap_mgmt_assoc-dont-reject-oversized-supported-channels-ie.patch"
 grep -q 'DEPENDS:=+kmod-mt-wifi-utility' "$CONNINFRA_MAKEFILE"
 grep -Fq 'AUTOLOAD:=$(call AutoLoad,09,mtk_wifi_utility,1)' "$SOURCE/package/mtk/drivers/wifi_utility/Makefile"
 grep -Fq 'AUTOLOAD:=$(call AutoLoad,10,conninfra,1)' "$CONNINFRA_MAKEFILE"

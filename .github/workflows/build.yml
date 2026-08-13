@@ -126,7 +126,8 @@ jobs:
           grep -qx 'CONFIG_PACKAGE_ucode-mod-datconf=y' .config
           grep -qx 'CONFIG_PACKAGE_ucode-mod-l1parser=y' .config
           grep -qx 'CONFIG_PACKAGE_wifi-scripts=y' .config
-          grep -qx 'CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y' .config
+          grep -qx 'CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y' .config
+          grep -qx '# CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673 is not set' .config
           grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y' .config
           grep -qx 'CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986="mt7986-fw-golden-7661"' .config
           ! grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_20260601=y' .config
@@ -145,6 +146,30 @@ jobs:
           grep -Fq 'AUTOLOAD:=$(call AutoLoad,10,conninfra,1)' package/mtk/drivers/conninfra/Makefile
           grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi)' package/mtk/drivers/mt_wifi/Makefile
           ! grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi,' package/mtk/drivers/mt_wifi/Makefile
+          for patch in \
+            022-since-v5.18-drop-deprecated-mm_segment_t-usages.patch \
+            023-since-v5.5-fix-printk-redefined-in-rt_linux.patch \
+            024-since-v5.16-fix-stdarg_h-not-found-error.patch \
+            025-since-v5.6-remove-rt_os-h-kernel-version-check.patch \
+            026-since-v6.1-replace-deprecated-prandom_u32-usage.patch \
+            027-since-v5.6-replace-deprecated-ioremap_nocache-usage.patch \
+            028-since-v5.18-replace-deprecated-PCI_DMA_FROMDEVICE-macro.patch \
+            029-since-v5.5-replace-deprecated-pr_warning-define.patch \
+            030-since-v5.18-replace-deprecated-pci_set_dma_mask-usage.patch \
+            031-remove-unused-and-deprecated-tim-in-bn_lib.patch \
+            032-since-v6.3-remove-deprecated-compound_dtor-in-printk.patch \
+            033-since-v5.17-replace-illegal-memmove-with-dev_addr_set.patch \
+            034-since-v6.12-fix-unaligned_h-not-found-error.patch \
+            035-since-v6.8-change-strlcpy-to-strscpy.patch \
+            037-fix-fortify-warning-1-cmm_wpa.patch \
+            037-fix-fortify-warning-2-pmf.patch \
+            037-fix-fortify-warning-3-sta-sanity-memmove-overflow.patch \
+            037-fix-fortify-warning-4-qos.patch \
+            038-fix-rrm-snprintf-read-overflow.patch; do
+            test -f "package/mtk/drivers/mt_wifi/patches-7661/$patch"
+          done
+          test ! -e package/mtk/drivers/mt_wifi/patches-7661/039-fix-qos-peer_vendor_spec_action-frame-check.patch
+          test ! -e package/mtk/drivers/mt_wifi/patches-7661/040-ap_mgmt_assoc-dont-reject-oversized-supported-channels-ie.patch
           grep -q '+wireless-tools' package/mtk/applications/mtwifi-cfg-ucode/Makefile
           grep -Fqx 'const DRIVERS = ["mt_wifi"];' package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc
           ! grep -Eq 'mtk_warp_proxy|mtk_warp' package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc
@@ -197,6 +222,8 @@ jobs:
           ! grep -q '25.12-SNAPSHOT' artifact/profiles.json
           test -f artifact/config.buildinfo
           grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' artifact/config.buildinfo
+          grep -qx 'CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y' artifact/config.buildinfo
+          ! grep -qx 'CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y' artifact/config.buildinfo
           grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y' artifact/config.buildinfo
           grep -qx 'CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986="mt7986-fw-golden-7661"' artifact/config.buildinfo
           ! grep -qx 'CONFIG_MTK_MT_WIFI_MT7986_20260601=y' artifact/config.buildinfo
@@ -262,7 +289,7 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: N60Pro-25.12.1-OFFICIAL-KERNEL-MTWiFi-7673-GOLDEN7661FW-MTDEEPROM-AB
+          name: N60Pro-25.12.1-OFFICIAL-KERNEL-MTWiFi-7661-GOLDENFW-MTDEEPROM-HOSTAB
           path: artifact/*
           if-no-files-found: error
           retention-days: 14

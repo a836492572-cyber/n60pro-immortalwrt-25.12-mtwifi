@@ -224,6 +224,14 @@ Key rule: one evidence-backed failure domain is analyzed broadly enough to find 
 - The official `0x1000` nvmem cell remains unchanged.
 - This is an RF calibration-path A/B, not a final root-cause judgment; the real-device target remains raw `50` / `48`.
 
+## Post-#44 host-driver A/B candidate
+- #43 firmware-only A/B failed on real hardware: 7.6.7.3 host + Golden 7661 firmware remained raw `44` / `45`.
+- #44 raw factory MTD EEPROM semantics A/B also failed for high-power: `e2p 0x1000`, `0x1002`, `0x2000`, and `0x4ffe` read as `FFFF`, but power remained raw `44` / `45`.
+- Closed for this candidate: firmware-only, nvmem partial zero-fill, EEPROM `0x1000` vs `0x5000`, RF offset, SKU, Backoff, Thermal, PowerUp, ePAGain, profile, WARP/HNAT.
+- Golden RF source vs donor 7661 is not RF-different in the targeted RF-symbol files; observed differences are donor non-RF patches such as flash API, memory shrink, site survey/stainfo, and return-type cleanup.
+- Current candidate changes only host driver version from `CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7673=y` to `CONFIG_MTK_MT_WIFI_DRIVER_VERSION_7661=y`, while keeping Golden firmware, raw factory MTD EEPROM, RF offset `0x0`, iPA/iLNA, autoload 09/10/11, WARP/HNAT isolation, official network DTS, and classic NAND/UBI boot unchanged.
+- 7661 needs the cumulative Linux 6.12 compatibility stack `022` through `035`, plus fortify/compile patches `037-1` through `037-4` and `038`. Behavioral patches `039` and `040` are intentionally not imported.
+
 ## Files that normally matter
 - `AGENTS.md` — permanent project/Codex hard rules.
 - `docs/BUILD_GATE.md` — mandatory pre-build gate.
