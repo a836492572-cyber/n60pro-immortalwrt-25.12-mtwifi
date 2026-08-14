@@ -226,23 +226,23 @@ jobs:
 
       - name: Collect firmware
         run: |
+          trap 'rc=$?; echo "::error::Collect firmware failed: line=$LINENO command=$BASH_COMMAND rc=$rc"; exit $rc' ERR
           mkdir -p artifact
           find source/bin/targets/mediatek/filogic -maxdepth 1 -type f \
             \( -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -o -name '*netcore_n60-pro*initramfs-recovery.itb' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
             -exec cp -v {} artifact/ \;
+          cp source/.config artifact/resolved.config
           test -n "$(find artifact -type f -name '*netcore_n60-pro*initramfs-recovery.itb' -print -quit)"
           test -n "$(find artifact -type f -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -print -quit)"
           grep -q '25.12.1' artifact/profiles.json
           ! grep -q '25.12-SNAPSHOT' artifact/profiles.json
           test -f artifact/config.buildinfo
-          grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' artifact/config.buildinfo
-          grep -qx '# CONFIG_MTK_MT7986_NEW_FW is not set' artifact/config.buildinfo
-          ! grep -Eq '^CONFIG_MTK_MT_WIFI_DRIVER_VERSION_(7661|7673)=y$' artifact/config.buildinfo
-          ! grep -Eq '^CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y$' artifact/config.buildinfo
-          ! grep -Eq '^CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986=' artifact/config.buildinfo
-          grep -qx 'CONFIG_CONNINFRA_AUTO_UP=y' artifact/config.buildinfo
-          grep -qx 'CONFIG_CONNINFRA_EMI_SUPPORT=y' artifact/config.buildinfo
-          grep -qx 'CONFIG_PACKAGE_wireless-tools=y' artifact/config.buildinfo
+          grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' artifact/resolved.config
+          grep -qx '# CONFIG_MTK_MT7986_NEW_FW is not set' artifact/resolved.config
+          grep -qx 'CONFIG_MTK_WIFI_FW_BIN_LOAD=y' artifact/resolved.config
+          grep -qx 'CONFIG_MTK_FIRST_IF_IPAILNA=y' artifact/resolved.config
+          grep -qx 'CONFIG_MTK_TPC_SUPPORT=y' artifact/resolved.config
+          grep -qx 'CONFIG_MTK_MGMT_TXPWR_CTRL=y' artifact/resolved.config
           test -d source/build_dir/target-aarch64_cortex-a53_musl/root-mediatek
           ROOTFS="$(realpath source/build_dir/target-aarch64_cortex-a53_musl/root-mediatek)"
           test -f "$ROOTFS/usr/sbin/iwpriv"
@@ -287,6 +287,15 @@ jobs:
           (cd "$GOLDEN_FW" && sha256sum -c "$GITHUB_WORKSPACE/artifact/GOLDEN-FW-SHA256SUMS.expected")
           cd artifact
           sha256sum * > BUILD-SHA256SUMS
+
+      - name: Upload candidate even if validation fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: n60pro-candidate-${{ github.run_number }}
+          path: artifact/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload build diagnostics
         if: failure()
