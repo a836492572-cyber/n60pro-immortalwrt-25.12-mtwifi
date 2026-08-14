@@ -73,6 +73,8 @@ import sys
 p = Path(sys.argv[1])
 s = p.read_text()
 replacements = [
+    ("PKG_VERSION:=7.6.6.1-$(PKG_SUFFIX)\n",
+     "PKG_VERSION:=7.6.6.1\n"),
     ("PKG_BUILD_DEPENDS:=warp\n", ""),
     ("  DEPENDS:=+wifi-dats\n  DEPENDS+=+kmod-conninfra\n  DEPENDS+=+kmod-mediatek_hnat\n",
      "  DEPENDS:=+wifi-dats\n  DEPENDS+=+kmod-conninfra\n"),
@@ -88,6 +90,7 @@ for old, new in replacements:
     s = s.replace(old, new, 1)
 p.write_text(s)
 PY
+grep -qx 'PKG_VERSION:=7.6.6.1' "$MT_WIFI_MAKEFILE"
 
 MTWIFI_UCODE_MAKEFILE="$SOURCE/package/mtk/applications/mtwifi-cfg-ucode/Makefile"
 python3 - "$MTWIFI_UCODE_MAKEFILE" <<'PY'
@@ -572,7 +575,7 @@ grep -q '^# CONFIG_MTK_MT7986_NEW_FW is not set$' "$SOURCE/.config"
 ! grep -Eq '^CONFIG_MTK_MT_WIFI_DRIVER_VERSION_(7661|7673)=y$' "$SOURCE/.config"
 ! grep -Eq '^CONFIG_MTK_MT_WIFI_MT7986_GOLDEN_7661=y$' "$SOURCE/.config"
 ! grep -Eq '^CONFIG_MTK_MT_WIFI_FIRMWARE_PATH_MT7986=' "$SOURCE/.config"
-grep -qx 'PKG_VERSION:=7.6.6.1-$(PKG_SUFFIX)' "$MT_WIFI_MAKEFILE"
+grep -qx 'PKG_VERSION:=7.6.6.1' "$MT_WIFI_MAKEFILE"
 for patch in \
   002-sort-site-survey-table.patch \
   003-fix-rxrate-stainfo.patch \

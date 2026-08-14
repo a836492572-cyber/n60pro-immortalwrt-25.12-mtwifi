@@ -147,7 +147,7 @@ jobs:
           grep -Fq 'AUTOLOAD:=$(call AutoLoad,10,conninfra,1)' package/mtk/drivers/conninfra/Makefile
           grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi)' package/mtk/drivers/mt_wifi/Makefile
           ! grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi,' package/mtk/drivers/mt_wifi/Makefile
-          grep -qx 'PKG_VERSION:=7.6.6.1-$(PKG_SUFFIX)' package/mtk/drivers/mt_wifi/Makefile
+            grep -qx 'PKG_VERSION:=7.6.6.1' package/mtk/drivers/mt_wifi/Makefile
           test -d "$GITHUB_WORKSPACE/.golden-mt_wifi-exact/.git"
           test "$(git -C "$GITHUB_WORKSPACE/.golden-mt_wifi-exact" rev-parse HEAD)" = "$GOLDEN_MT_WIFI_COMMIT"
           for patch in \
