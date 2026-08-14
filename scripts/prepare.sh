@@ -53,7 +53,6 @@ MT_WIFI_GOLDEN_OVERLAY_SRC="$BUILDER/ci/mt_wifi-golden-6.12-overlay"
   test -d "$MT_WIFI_GOLDEN_OVERLAY_SRC"
   for patch in \
     100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
-    109-remove-unused-tim-in-bn_lib.patch \
     112-since-v6.12-fix-unaligned_h-not-found-error.patch \
     113-since-v6.8-change-strlcpy-to-strscpy.patch \
   114-fix-fortify-warning-1-cmm_wpa.patch \
@@ -600,7 +599,6 @@ for patch in \
   done
   for patch in \
     100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
-    109-remove-unused-tim-in-bn_lib.patch \
     112-since-v6.12-fix-unaligned_h-not-found-error.patch \
     113-since-v6.8-change-strlcpy-to-strscpy.patch \
   114-fix-fortify-warning-1-cmm_wpa.patch \
