@@ -86,6 +86,7 @@ jobs:
       - name: Resolve config
         working-directory: source
         run: |
+          trap 'rc=$?; echo "::error::Resolve config failed: line=$LINENO command=$BASH_COMMAND rc=$rc"; exit $rc' ERR
           # The release config is a buildbot repository config. Preserve its
           # target/kernel settings, but do not compile every optional kmod,
           # every target-specific package, SDK, ImageBuilder or toolchain.
@@ -96,6 +97,7 @@ jobs:
           done
 
           make defconfig
+          grep -E '^CONFIG_PACKAGE_(luci-app-openclash|luci-app-store|dnsmasq|dnsmasq-full|kmod-nft-tproxy)=' .config || true
 
           test -f .config.kernel-official
           grep -qx 'CONFIG_ALL_KMODS=y' .config.kernel-official
