@@ -120,7 +120,7 @@ p.write_text('\n'.join(out) + '\n')
 PY
 
 # Append only the proprietary Wi-Fi package/Kconfig selections from our fragment.
-grep -E '^(CONFIG_MTK_|# CONFIG_MTK_|CONFIG_CONNINFRA_AUTO_UP=|CONFIG_CONNINFRA_EMI_SUPPORT=|CONFIG_first_card|CONFIG_PACKAGE_kmod-conninfra=|CONFIG_PACKAGE_kmod-mt_wifi=|CONFIG_PACKAGE_mtwifi-cfg-ucode=|# CONFIG_PACKAGE_iwinfo is not set|CONFIG_PACKAGE_iwinfo-ucode=|CONFIG_PACKAGE_luci-app-mtwifi-cfg=|CONFIG_PACKAGE_luci-i18n-mtwifi-cfg-zh-cn=|CONFIG_PACKAGE_luci-app-openclash=|CONFIG_PACKAGE_luci-app-store=|# CONFIG_PACKAGE_kmod-warp is not set|# CONFIG_PACKAGE_kmod-mediatek_hnat is not set)' \
+grep -E '^(CONFIG_MTK_|# CONFIG_MTK_|CONFIG_CONNINFRA_AUTO_UP=|CONFIG_CONNINFRA_EMI_SUPPORT=|CONFIG_first_card|CONFIG_PACKAGE_kmod-conninfra=|CONFIG_PACKAGE_kmod-mt_wifi=|CONFIG_PACKAGE_mtwifi-cfg-ucode=|# CONFIG_PACKAGE_iwinfo is not set|CONFIG_PACKAGE_iwinfo-ucode=|CONFIG_PACKAGE_luci-app-mtwifi-cfg=|CONFIG_PACKAGE_luci-i18n-mtwifi-cfg-zh-cn=|CONFIG_PACKAGE_luci-app-openclash=|CONFIG_PACKAGE_luci-app-store=|CONFIG_PACKAGE_xz-utils=|# CONFIG_PACKAGE_kmod-warp is not set|# CONFIG_PACKAGE_kmod-mediatek_hnat is not set)' \
     "$BUILDER/config/n60pro-extra.config" >> "$SOURCE/.config"
 echo 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' >> "$SOURCE/.config"
 
@@ -148,6 +148,7 @@ grep -qx 'CONFIG_CONNINFRA_EMI_SUPPORT=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_mtwifi-cfg-ucode=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_luci-app-openclash=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_luci-app-store=y' "$SOURCE/.config"
+grep -qx 'CONFIG_PACKAGE_xz-utils=y' "$SOURCE/.config"
 grep -qx '# CONFIG_PACKAGE_iwinfo is not set' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_iwinfo-ucode=y' "$SOURCE/.config"
 ! grep -Eq '^CONFIG_PACKAGE_mtwifi-cfg=(y|m)$' "$SOURCE/.config"
