@@ -87,8 +87,8 @@ CONFIG_TARGET_MULTI_PROFILE=y
 CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netcore_n60-pro=y
 CFG
 
-# Remove any release values for the proprietary stack before appending our
-# pinned 237/mt_wifi 7.6.7.3 choices.
+# Remove any release values for the proprietary stack and final app selections
+# before appending our pinned choices.
 python3 - "$SOURCE/.config" <<'PY'
 from pathlib import Path
 import re, sys
@@ -103,6 +103,10 @@ exact = {
     'CONFIG_PACKAGE_mtwifi-cfg-ucode',
     'CONFIG_PACKAGE_luci-app-mtwifi-cfg',
     'CONFIG_PACKAGE_luci-i18n-mtwifi-cfg-zh-cn',
+    'CONFIG_PACKAGE_luci-app-openclash',
+    'CONFIG_PACKAGE_luci-compat',
+    'CONFIG_PACKAGE_luci-app-store',
+    'CONFIG_PACKAGE_xz-utils',
     'CONFIG_PACKAGE_kmod-mt-wifi-utility',
     'CONFIG_PACKAGE_kmod-warp',
     'CONFIG_PACKAGE_kmod-mediatek_hnat',
@@ -119,8 +123,8 @@ for line in lines:
 p.write_text('\n'.join(out) + '\n')
 PY
 
-# Append only the proprietary Wi-Fi package/Kconfig selections from our fragment.
-grep -E '^(CONFIG_MTK_|# CONFIG_MTK_|CONFIG_CONNINFRA_AUTO_UP=|CONFIG_CONNINFRA_EMI_SUPPORT=|CONFIG_first_card|CONFIG_PACKAGE_kmod-conninfra=|CONFIG_PACKAGE_kmod-mt_wifi=|CONFIG_PACKAGE_mtwifi-cfg-ucode=|# CONFIG_PACKAGE_iwinfo is not set|CONFIG_PACKAGE_iwinfo-ucode=|CONFIG_PACKAGE_luci-app-mtwifi-cfg=|CONFIG_PACKAGE_luci-i18n-mtwifi-cfg-zh-cn=|CONFIG_PACKAGE_luci-app-openclash=|CONFIG_PACKAGE_luci-app-store=|CONFIG_PACKAGE_xz-utils=|# CONFIG_PACKAGE_kmod-warp is not set|# CONFIG_PACKAGE_kmod-mediatek_hnat is not set)' \
+# Append the proprietary Wi-Fi and final app selections from our fragment.
+grep -E '^(CONFIG_MTK_|# CONFIG_MTK_|CONFIG_CONNINFRA_AUTO_UP=|CONFIG_CONNINFRA_EMI_SUPPORT=|CONFIG_first_card|CONFIG_PACKAGE_kmod-conninfra=|CONFIG_PACKAGE_kmod-mt_wifi=|CONFIG_PACKAGE_mtwifi-cfg-ucode=|# CONFIG_PACKAGE_iwinfo is not set|CONFIG_PACKAGE_iwinfo-ucode=|CONFIG_PACKAGE_luci-app-mtwifi-cfg=|CONFIG_PACKAGE_luci-i18n-mtwifi-cfg-zh-cn=|CONFIG_PACKAGE_luci-app-openclash=|CONFIG_PACKAGE_luci-compat=|CONFIG_PACKAGE_luci-app-store=|CONFIG_PACKAGE_xz-utils=|# CONFIG_PACKAGE_kmod-warp is not set|# CONFIG_PACKAGE_kmod-mediatek_hnat is not set)' \
     "$BUILDER/config/n60pro-extra.config" >> "$SOURCE/.config"
 echo 'CONFIG_PACKAGE_kmod-mt-wifi-utility=y' >> "$SOURCE/.config"
 
@@ -147,6 +151,7 @@ grep -qx 'CONFIG_CONNINFRA_AUTO_UP=y' "$SOURCE/.config"
 grep -qx 'CONFIG_CONNINFRA_EMI_SUPPORT=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_mtwifi-cfg-ucode=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_luci-app-openclash=y' "$SOURCE/.config"
+grep -qx 'CONFIG_PACKAGE_luci-compat=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_luci-app-store=y' "$SOURCE/.config"
 grep -qx 'CONFIG_PACKAGE_xz-utils=y' "$SOURCE/.config"
 grep -qx '# CONFIG_PACKAGE_iwinfo is not set' "$SOURCE/.config"
@@ -156,4 +161,4 @@ test -f "$SOURCE/.config.kernel-official"
 grep -qx 'CONFIG_ALL_KMODS=y' "$SOURCE/.config.kernel-official"
 grep -qx 'CONFIG_ALL_NONSHARED=y' "$SOURCE/.config.kernel-official"
 
-echo 'official 25.12.1 filogic release config sidecar + required WEXT + buildbot cleanup disabled: OK'
+echo 'official 25.12.1 filogic release config sidecar + required WEXT + final apps + buildbot cleanup disabled: OK'

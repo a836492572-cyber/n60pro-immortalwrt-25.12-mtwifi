@@ -97,7 +97,7 @@ jobs:
           done
 
           make defconfig
-          grep -E '^CONFIG_PACKAGE_(luci-app-openclash|luci-app-store|dnsmasq|dnsmasq-full|kmod-nft-tproxy)=' .config || true
+          grep -E '^CONFIG_PACKAGE_(luci-app-openclash|luci-compat|luci-app-store|xz-utils|dnsmasq|dnsmasq-full|kmod-nft-tproxy)=' .config || true
 
           test -f .config.kernel-official
           grep -qx 'CONFIG_ALL_KMODS=y' .config.kernel-official
@@ -133,7 +133,10 @@ jobs:
           grep -qx 'CONFIG_PACKAGE_ucode-mod-l1parser=y' .config
           grep -qx 'CONFIG_PACKAGE_wifi-scripts=y' .config
           grep -qx 'CONFIG_PACKAGE_luci-app-openclash=y' .config
+          grep -qx 'CONFIG_PACKAGE_luci-compat=y' .config
+          grep -qx 'CONFIG_PACKAGE_luci-lua-runtime=y' .config
           grep -qx 'CONFIG_PACKAGE_luci-app-store=y' .config
+          grep -qx 'CONFIG_PACKAGE_xz-utils=y' .config
           grep -qx 'CONFIG_PACKAGE_dnsmasq-full=y' .config
           grep -qx 'CONFIG_PACKAGE_kmod-nft-tproxy=y' .config
           ! grep -qx 'CONFIG_PACKAGE_dnsmasq=y' .config
@@ -239,7 +242,7 @@ jobs:
           trap 'rc=$?; echo "::error::Collect firmware failed: line=$LINENO command=$BASH_COMMAND rc=$rc"; exit $rc' ERR
           mkdir -p artifact
           find source/bin/targets/mediatek/filogic -maxdepth 1 -type f \
-            \( -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -o -name '*netcore_n60-pro*initramfs-recovery.itb' -o -name '*netcore_n60-pro*.manifest' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
+            \( -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -o -name '*netcore_n60-pro*initramfs-recovery.itb' -o -name '*.manifest' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
             -exec cp -v {} artifact/ \;
           cp source/.config artifact/resolved.config
           test -n "$(find artifact -type f -name '*netcore_n60-pro*initramfs-recovery.itb' -print -quit)"
@@ -253,14 +256,18 @@ jobs:
           grep -qx 'CONFIG_MTK_FIRST_IF_IPAILNA=y' artifact/resolved.config
           grep -qx 'CONFIG_MTK_TPC_SUPPORT=y' artifact/resolved.config
           grep -qx 'CONFIG_MTK_MGMT_TXPWR_CTRL=y' artifact/resolved.config
+          grep -qx 'CONFIG_PACKAGE_luci-app-openclash=y' artifact/resolved.config
+          grep -qx 'CONFIG_PACKAGE_luci-compat=y' artifact/resolved.config
+          grep -qx 'CONFIG_PACKAGE_luci-lua-runtime=y' artifact/resolved.config
+          grep -qx 'CONFIG_PACKAGE_luci-app-store=y' artifact/resolved.config
           test -d source/build_dir/target-aarch64_cortex-a53_musl/root-mediatek
           ROOTFS="$(realpath source/build_dir/target-aarch64_cortex-a53_musl/root-mediatek)"
           test -f "$ROOTFS/usr/sbin/iwpriv"
           test -x "$ROOTFS/usr/sbin/iwpriv"
           test -x "$ROOTFS/etc/init.d/openclash"
-          MANIFEST="$(find source/bin/targets/mediatek/filogic -maxdepth 1 -type f -name '*netcore_n60-pro*.manifest' -print -quit)"
-          test -f "$MANIFEST"
-          grep -Eq '^luci-app-store[[:space:]]' "$MANIFEST"
+          test -f "$ROOTFS/usr/lib/lua/luci/cbi.lua"
+          test -f "$ROOTFS/usr/lib/lua/luci/cbi/datatypes.lua"
+          test -x "$ROOTFS/etc/init.d/istore"
           test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mtk_wifi_utility.ko' -print -quit)"
           test -n "$(find "$ROOTFS/lib/modules" -type f -name 'conninfra.ko' -print -quit)"
           test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mt_wifi.ko' -print -quit)"
