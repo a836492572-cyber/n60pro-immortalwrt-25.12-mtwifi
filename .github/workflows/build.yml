@@ -73,7 +73,10 @@ jobs:
       - name: Update feeds
         working-directory: source
         run: |
+          bash "$GITHUB_WORKSPACE/scripts/prepare-final-apps.sh" "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE"
           ./scripts/feeds update -a
+          git -C feeds/istore checkout --detach 6f795b7640390ab28a2f1aaa14b33292aa5f2128
+          test "$(git -C feeds/istore rev-parse HEAD)" = "6f795b7640390ab28a2f1aaa14b33292aa5f2128"
           ./scripts/feeds install -a
 
       - name: Rebase official release config and kernel sidecar
@@ -127,6 +130,11 @@ jobs:
           grep -qx 'CONFIG_PACKAGE_ucode-mod-datconf=y' .config
           grep -qx 'CONFIG_PACKAGE_ucode-mod-l1parser=y' .config
           grep -qx 'CONFIG_PACKAGE_wifi-scripts=y' .config
+          grep -qx 'CONFIG_PACKAGE_luci-app-openclash=y' .config
+          grep -qx 'CONFIG_PACKAGE_luci-app-store=y' .config
+          grep -qx 'CONFIG_PACKAGE_dnsmasq-full=y' .config
+          grep -qx 'CONFIG_PACKAGE_kmod-nft-tproxy=y' .config
+          ! grep -qx 'CONFIG_PACKAGE_dnsmasq=y' .config
           grep -qx '# CONFIG_MTK_MT7986_NEW_FW is not set' .config
           grep -qx 'CONFIG_MTK_WIFI_FW_BIN_LOAD=y' .config
           ! grep -Eq '^CONFIG_MTK_MT_WIFI_DRIVER_VERSION_(7661|7673)=y$' .config
@@ -229,7 +237,7 @@ jobs:
           trap 'rc=$?; echo "::error::Collect firmware failed: line=$LINENO command=$BASH_COMMAND rc=$rc"; exit $rc' ERR
           mkdir -p artifact
           find source/bin/targets/mediatek/filogic -maxdepth 1 -type f \
-            \( -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -o -name '*netcore_n60-pro*initramfs-recovery.itb' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
+            \( -name '*netcore_n60-pro*squashfs-sysupgrade.bin' -o -name '*netcore_n60-pro*initramfs-recovery.itb' -o -name '*netcore_n60-pro*.manifest' -o -name 'sha256sums' -o -name 'profiles.json' -o -name '*.buildinfo' \) \
             -exec cp -v {} artifact/ \;
           cp source/.config artifact/resolved.config
           test -n "$(find artifact -type f -name '*netcore_n60-pro*initramfs-recovery.itb' -print -quit)"
@@ -247,6 +255,10 @@ jobs:
           ROOTFS="$(realpath source/build_dir/target-aarch64_cortex-a53_musl/root-mediatek)"
           test -f "$ROOTFS/usr/sbin/iwpriv"
           test -x "$ROOTFS/usr/sbin/iwpriv"
+          test -x "$ROOTFS/etc/init.d/openclash"
+          MANIFEST="$(find source/bin/targets/mediatek/filogic -maxdepth 1 -type f -name '*netcore_n60-pro*.manifest' -print -quit)"
+          test -f "$MANIFEST"
+          grep -Eq '^luci-app-store[[:space:]]' "$MANIFEST"
           test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mtk_wifi_utility.ko' -print -quit)"
           test -n "$(find "$ROOTFS/lib/modules" -type f -name 'conninfra.ko' -print -quit)"
           test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mt_wifi.ko' -print -quit)"
