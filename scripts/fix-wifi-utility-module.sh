@@ -16,3 +16,31 @@ grep -Fqx "$new" "$PATCH"
 ! grep -Fq 'for_each_of_allnodes(np)' "$PATCH"
 
 echo 'wifi_utility module export fix: OK'
+
+# Donor iwinfo patch 0001 widens the fixed WEXT userspace ABI fields
+# iw_param.value and iw_range.bitrate[] from 32 to 64 bits. Linux 6.12 still
+# returns the standard 32-bit layout, so the widened iw_param reads the
+# following fixed/disabled/flags bytes as the upper half of bitrate.value.
+# Keep only the donor's required scan_capa layout correction.
+IWINFO_WEXT_PATCH="$SOURCE/package/network/utils/iwinfo/patches/0001-fix-wext-h.patch"
+test -f "$IWINFO_WEXT_PATCH"
+[ "$(grep -Fc 'uint64_t' "$IWINFO_WEXT_PATCH")" -eq 2 ]
+grep -Fq 'scan_capa' "$IWINFO_WEXT_PATCH"
+cat > "$IWINFO_WEXT_PATCH" <<'PATCH'
+--- a/api/wext.h
++++ b/api/wext.h
+@@ -988,6 +988,9 @@
+ 	uint16_t		old_num_channels;
+ 	uint8_t		old_num_frequency;
+ 
++	/* Scan capabilities */
++	uint8_t		scan_capa; 	/* IW_SCAN_CAPA_* bit field */
++
+ 	/* Wireless event capability bitmasks */
+ 	uint32_t		event_capa[6];
+ 
+PATCH
+! grep -Fq 'uint64_t' "$IWINFO_WEXT_PATCH"
+grep -Fq 'scan_capa' "$IWINFO_WEXT_PATCH"
+
+echo 'iwinfo WEXT userspace ABI fix: OK'
