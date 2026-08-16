@@ -63,6 +63,7 @@ jobs:
           cd mtk-donor
           git fetch --depth=1 origin "$MTK_COMMIT"
           git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$MTK_COMMIT"
           cd ..
 
       - name: Apply MTK stack, 237 radio profile, 2G/512M layout
@@ -97,7 +98,7 @@ jobs:
           done
 
           make defconfig
-          grep -E '^CONFIG_PACKAGE_(luci-app-openclash|luci-compat|luci-app-store|xz-utils|dnsmasq|dnsmasq-full|kmod-nft-tproxy)=' .config || true
+          grep -E '^CONFIG_PACKAGE_(luci-app-openclash|luci-compat|luci-app-store|xz-utils|dnsmasq|dnsmasq-full|kmod-nft-tproxy|kmod-mediatek_hnat|kmod-warp)=' .config || true
 
           test -f .config.kernel-official
           grep -qx 'CONFIG_ALL_KMODS=y' .config.kernel-official
@@ -149,18 +150,35 @@ jobs:
           grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' .config
           grep -qx 'CONFIG_CONNINFRA_AUTO_UP=y' .config
           grep -qx 'CONFIG_CONNINFRA_EMI_SUPPORT=y' .config
-          ! grep -qx 'CONFIG_PACKAGE_kmod-warp=y' .config
-          ! grep -qx 'CONFIG_PACKAGE_kmod-mediatek_hnat=y' .config
-          ! grep -Eq '^CONFIG_MTK_FAST_NAT_SUPPORT=(y|m)$' .config
-          ! grep -Eq '^CONFIG_MTK_WHNAT_SUPPORT=(y|m)$' .config
-          ! grep -Eq '^CONFIG_MTK_WARP_V2=(y|m)$' .config
+
+          # Hardware acceleration is now a required product feature. The full
+          # pinned MT7986 chain must resolve, not merely the package names.
+          grep -qx 'CONFIG_PACKAGE_kmod-mediatek_hnat=y' .config
+          grep -qx 'CONFIG_PACKAGE_kmod-warp=y' .config
+          grep -qx 'CONFIG_MTK_FAST_NAT_SUPPORT=y' .config
+          grep -qx 'CONFIG_MTK_WARP_V2=y' .config
+          grep -qx 'CONFIG_MTK_WHNAT_SUPPORT=m' .config
+          grep -qx 'CONFIG_WARP_CHIPSET="mt7986"' .config
+          grep -qx 'CONFIG_WARP_VERSION=2' .config
+          grep -qx 'CONFIG_WED_HW_RRO_SUPPORT=y' .config
+
           ! grep -Eq '^CONFIG_PACKAGE_iwinfo=(y|m)$' .config
           ! grep -Eq '^CONFIG_PACKAGE_mtwifi-cfg=(y|m)$' .config
           grep -Fq 'AUTOLOAD:=$(call AutoLoad,09,mtk_wifi_utility,1)' package/mtk/drivers/wifi_utility/Makefile
           grep -Fq 'AUTOLOAD:=$(call AutoLoad,10,conninfra,1)' package/mtk/drivers/conninfra/Makefile
-          grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi)' package/mtk/drivers/mt_wifi/Makefile
-          ! grep -Fq 'AUTOLOAD:=$(call AutoLoad,11,mt_wifi,' package/mtk/drivers/mt_wifi/Makefile
-            grep -qx 'PKG_VERSION:=7.6.6.1' package/mtk/drivers/mt_wifi/Makefile
+          grep -Fq 'AUTOLOAD:=$(call AutoProbe,mt_wifi mtk_warp_proxy)' package/mtk/drivers/mt_wifi/Makefile
+          grep -qx 'PKG_BUILD_DEPENDS:=warp' package/mtk/drivers/mt_wifi/Makefile
+          grep -q '+kmod-mediatek_hnat' package/mtk/drivers/mt_wifi/Makefile
+          grep -q '+kmod-warp' package/mtk/drivers/mt_wifi/Makefile
+          grep -q 'mtk_warp_proxy.ko' package/mtk/drivers/mt_wifi/Makefile
+          grep -qx 'PKG_VERSION:=7.6.6.1' package/mtk/drivers/mt_wifi/Makefile
+          test -f package/mtk/drivers/warp/Makefile
+          grep -q 'AUTOLOAD:=$(call AutoLoad,60,mtk_warp)' package/mtk/drivers/warp/Makefile
+          test -d target/linux/mediatek/files-6.12/drivers/net/ethernet/mediatek/mtk_hnat
+          test -f target/linux/mediatek/patches-6.12/999-eth-91-mtk_eth_soc-add-mtkhnat-driver-support.patch
+          grep -q 'define KernelPackage/mediatek_hnat' package/kernel/linux/modules/netdevices.mk
+          grep -q 'CONFIG_NET_MEDIATEK_HNAT=y' package/kernel/linux/modules/netdevices.mk
+
           test -d "$GITHUB_WORKSPACE/.golden-mt_wifi-exact/.git"
           test "$(git -C "$GITHUB_WORKSPACE/.golden-mt_wifi-exact" rev-parse HEAD)" = "$GOLDEN_MT_WIFI_COMMIT"
           for patch in \
@@ -183,10 +201,10 @@ jobs:
             018-fix-he-max-bw.patch \
             019-fix-vht-bw.patch \
             020-wapp-btm--steering.patch \
-              021-add-roam-steering-setting.patch \
-              022-fix-return-type.patch \
-              100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
-              112-since-v6.12-fix-unaligned_h-not-found-error.patch \
+            021-add-roam-steering-setting.patch \
+            022-fix-return-type.patch \
+            100-since-v5.18-use-kernel_write-instead-of-__kernel_write.patch \
+            112-since-v6.12-fix-unaligned_h-not-found-error.patch \
             113-since-v6.8-change-strlcpy-to-strscpy.patch \
             114-fix-fortify-warning-1-cmm_wpa.patch \
             115-fix-fortify-warning-2-pmf.patch \
@@ -198,8 +216,8 @@ jobs:
           test ! -e package/mtk/drivers/mt_wifi/patches/039-fix-qos-peer_vendor_spec_action-frame-check.patch
           test ! -e package/mtk/drivers/mt_wifi/patches/040-ap_mgmt_assoc-dont-reject-oversized-supported-channels-ie.patch
           grep -q '+wireless-tools' package/mtk/applications/mtwifi-cfg-ucode/Makefile
-          grep -Fqx 'const DRIVERS = ["mt_wifi"];' package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc
-          ! grep -Eq 'mtk_warp_proxy|mtk_warp' package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc
+          grep -Fqx 'const DRIVERS = ["mtk_warp_proxy", "mtk_warp", "mt_wifi"];' package/mtk/applications/mtwifi-cfg-ucode/files/usr/share/ucode/mtwifi/driver.uc
+
           DTS="target/linux/mediatek/dts/mt7986a-netcore-n60-pro.dts"
           grep -q 'factory: partition@180000' "$DTS"
           grep -A6 'factory: partition@180000' "$DTS" | grep -q 'reg = <0x180000 0x200000>;'
@@ -260,6 +278,12 @@ jobs:
           grep -qx 'CONFIG_PACKAGE_luci-compat=y' artifact/resolved.config
           grep -qx 'CONFIG_PACKAGE_luci-lua-runtime=y' artifact/resolved.config
           grep -qx 'CONFIG_PACKAGE_luci-app-store=y' artifact/resolved.config
+          grep -qx 'CONFIG_PACKAGE_kmod-mediatek_hnat=y' artifact/resolved.config
+          grep -qx 'CONFIG_PACKAGE_kmod-warp=y' artifact/resolved.config
+          grep -qx 'CONFIG_MTK_FAST_NAT_SUPPORT=y' artifact/resolved.config
+          grep -qx 'CONFIG_MTK_WARP_V2=y' artifact/resolved.config
+          grep -qx 'CONFIG_MTK_WHNAT_SUPPORT=m' artifact/resolved.config
+
           test -d source/build_dir/target-aarch64_cortex-a53_musl/root-mediatek
           ROOTFS="$(realpath source/build_dir/target-aarch64_cortex-a53_musl/root-mediatek)"
           test -f "$ROOTFS/usr/sbin/iwpriv"
@@ -270,15 +294,19 @@ jobs:
           test -x "$ROOTFS/etc/init.d/istore"
           test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mtk_wifi_utility.ko' -print -quit)"
           test -n "$(find "$ROOTFS/lib/modules" -type f -name 'conninfra.ko' -print -quit)"
+          test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mtkhnat.ko' -print -quit)"
+          test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mtk_warp.ko' -print -quit)"
           test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mt_wifi.ko' -print -quit)"
-          grep -qx 'mtk_wifi_utility' "$ROOTFS/etc/modules.d/09-mt-wifi-utility"
-          grep -qx 'conninfra' "$ROOTFS/etc/modules.d/10-conninfra"
-          grep -qx 'mt_wifi' "$ROOTFS/etc/modules.d/11-mt_wifi"
+          test -n "$(find "$ROOTFS/lib/modules" -type f -name 'mtk_warp_proxy.ko' -print -quit)"
+          grep -Rqx 'mtk_wifi_utility' "$ROOTFS/etc/modules.d"
+          grep -Rqx 'conninfra' "$ROOTFS/etc/modules.d"
+          grep -Rqx 'mtkhnat' "$ROOTFS/etc/modules.d"
+          grep -Rqx 'mtk_warp' "$ROOTFS/etc/modules.d"
+          grep -Rqx 'mt_wifi' "$ROOTFS/etc/modules.d"
+          grep -Rqx 'mtk_warp_proxy' "$ROOTFS/etc/modules.d"
           test -L "$ROOTFS/etc/modules-boot.d/09-mt-wifi-utility"
           test -L "$ROOTFS/etc/modules-boot.d/10-conninfra"
-          test ! -e "$ROOTFS/etc/modules-boot.d/11-mt_wifi"
-          ! grep -R -E 'mtk_warp_proxy|mtk_warp' "$ROOTFS/etc/modules.d"
-          ! find "$ROOTFS/lib/modules" -type f -name 'mtk_warp_proxy.ko' | grep -q .
+
           L1PROFILE="$ROOTFS/etc/wireless/l1profile.dat"
           test -f "$L1PROFILE"
           grep -qx 'INDEX0_EEPROM_offset=0x0' "$L1PROFILE"
@@ -332,7 +360,7 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: N60Pro-25.12.1-GOLDEN-EXACT-7661-RF-ENCLAVE
+          name: N60Pro-25.12.1-GOLDEN-EXACT-7661-RF-ENCLAVE-HWACCEL
           path: artifact/*
           if-no-files-found: error
           retention-days: 14
