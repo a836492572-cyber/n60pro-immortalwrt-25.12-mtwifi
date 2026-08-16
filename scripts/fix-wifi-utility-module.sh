@@ -2,6 +2,8 @@
 set -euo pipefail
 
 SOURCE="${1:?usage: fix-wifi-utility-module.sh <official-source>}"
+BUILDER="$(dirname "$SOURCE")"
+DONOR="$BUILDER/mtk-donor"
 PATCH="$SOURCE/target/linux/mediatek/patches-6.12/999-zzz-5203-mtk-wifi_utility-add-universal-eeprom-read-write-backend.patch"
 
 test -f "$PATCH"
@@ -44,3 +46,7 @@ PATCH
 grep -Fq 'scan_capa' "$IWINFO_WEXT_PATCH"
 
 echo 'iwinfo WEXT userspace ABI fix: OK'
+
+# Restore the pinned Linux 6.12 MediaTek acceleration sidecar only after the
+# #50 RF enclave and wifi_utility fixes are in place.
+bash "$BUILDER/scripts/restore-hw-accel.sh" "$SOURCE" "$DONOR" "$BUILDER"
