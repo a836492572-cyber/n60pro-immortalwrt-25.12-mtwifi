@@ -7,6 +7,7 @@ DONOR="${2:?usage: install-hnat-flow-prereqs-56.sh <official-prepared-source> <6
 PATCH_DIR="$SOURCE/target/linux/mediatek/patches-6.12"
 DONOR_PATCH_DIR="$DONOR/target/linux/mediatek/patches-6.12"
 HNAT_H="$SOURCE/target/linux/mediatek/files-6.12/drivers/net/ethernet/mediatek/mtk_hnat/hnat.h"
+HNAT_DEBUGFS="$SOURCE/target/linux/mediatek/files-6.12/drivers/net/ethernet/mediatek/mtk_hnat/hnat_debugfs.c"
 
 # The standalone MediaTek HNAT driver is not self-contained: its virtual-path
 # code relies on the donor's small nf_flow_table/net_device plumbing for VLAN,
@@ -35,6 +36,7 @@ for patch in "${patches[@]}"; do
 done
 
 test -f "$HNAT_H"
+test -f "$HNAT_DEBUGFS"
 
 # The three net_device path-type patches are a strict donor sequence:
 #   MACVLAN -> DSLITE/6RD -> TNL
@@ -108,11 +110,44 @@ if s.count("#define MTK_QDMA_QUEUE_MASK 0x0f") != 1:
 p.write_text(s)
 PY
 
+# The donor HNAT debugfs file carries an include of mtk_eth_dbg.h even though
+# it does not use the proprietary Ethernet debugfs API. That header is created
+# only by donor patch 999-eth-90, which also replaces/extends thousands of lines
+# in the Ethernet debug stack and has its own PPPQ dependencies. Keep the
+# official 25.12.1 Ethernet implementation and remove only this stale include.
+python3 - "$HNAT_DEBUGFS" <<'PY'
+from pathlib import Path
+import sys
+
+p = Path(sys.argv[1])
+s = p.read_text()
+include = '#include "../mtk_eth_dbg.h"\n'
+marker = 'N60PRO_HWACCEL_56_HNAT_DEBUGFS_COMPAT'
+
+if marker not in s:
+    if s.count(include) != 1:
+        raise SystemExit(f"unexpected mtk_eth_dbg.h include count: {s.count(include)}")
+    s = s.replace(
+        include,
+        '/* N60PRO_HWACCEL_56_HNAT_DEBUGFS_COMPAT: donor Ethernet debugfs header is unused here. */\n',
+        1,
+    )
+
+if marker not in s:
+    raise SystemExit("HNAT debugfs compatibility marker missing after edit")
+if 'mtk_eth_dbg.h' in s:
+    raise SystemExit("donor mtk_eth_dbg.h dependency survived HNAT debugfs compatibility edit")
+
+p.write_text(s)
+PY
+
 for patch in "${patches[@]}"; do
   test -f "$PATCH_DIR/$patch"
 done
 grep -q 'N60PRO_HWACCEL_56_HNAT_SOURCE_COMPAT' "$HNAT_H"
 ! grep -q 'DSA_TAG_PROTO_MXL862_8021Q' "$HNAT_H"
 grep -qx '#define MTK_QDMA_QUEUE_MASK 0x0f' "$HNAT_H"
+grep -q 'N60PRO_HWACCEL_56_HNAT_DEBUGFS_COMPAT' "$HNAT_DEBUGFS"
+! grep -q 'mtk_eth_dbg.h' "$HNAT_DEBUGFS"
 
-echo "#56 HNAT flow-path prerequisites + netdev path sequence + N60 Pro source compat: OK"
+echo "#56 HNAT flow-path prerequisites + netdev path sequence + N60 Pro source/debugfs compat: OK"
