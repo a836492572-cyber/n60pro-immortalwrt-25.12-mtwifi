@@ -11,9 +11,9 @@ HNAT_DEBUGFS="$SOURCE/target/linux/mediatek/files-6.12/drivers/net/ethernet/medi
 
 # The standalone MediaTek HNAT driver is not self-contained: its virtual-path
 # code relies on the donor's small nf_flow_table/net_device plumbing for VLAN,
-# bridge, PPPoE, DSA and macvlan. Carry only that coherent flow-path series,
-# plus the minimal net_device path-type progression that the donor tunnel/HNAT
-# code expects. Do not import the donor Ethernet/DSA/PHY/PPE trees.
+# bridge, PPPoE, DSA and macvlan. Carry the coherent flow-path series, the
+# required net_device path progression, and the matching offload-stat callbacks.
+# Do not import unrelated donor Ethernet/DSA/PHY/PPE trees.
 patches=(
   999-hnat-03-netfilter-nf_flow_table-support-hw-offload-through-v.patch
   999-hnat-04-net-8021q-support-hardware-flow-table-offload.patch
@@ -22,9 +22,12 @@ patches=(
   999-hnat-07-net-dsa-support-hardware-flow-table-offload.patch
   999-hnat-08-net-macvlan-support-hardware-flow-table-offload.patch
   999-hnat-09-mtkhnat-add-support-for-virtual-interface-acceleration.patch
+  999-hnat-14-net-vlan-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch
+  999-hnat-15-ppp-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch
   999-net-01-netdevice-add-macvlan-device-path-type.patch
   999-net-02-netdevice-add-dslite-device-path-type.patch
   999-net-03-netdevice-add-tnl-device-path-type.patch
+  999-net-04-netdevice-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch
   999-tnl-01-mtk-tunnel-offload-support.patch
 )
 
@@ -38,14 +41,18 @@ done
 test -f "$HNAT_H"
 test -f "$HNAT_DEBUGFS"
 
-# The three net_device path-type patches are a strict donor sequence:
-#   MACVLAN -> DSLITE/6RD -> TNL
-# 999-net-03 is intentionally not rebased in isolation; its context requires
-# the two preceding enum additions. Keep only this narrow ABI progression.
+# The net_device path patches are a strict donor sequence:
+#   MACVLAN -> DSLITE/6RD -> TNL -> offload-stat callback ABI.
+# Keep the matching VLAN/PPP callback implementations so hardware-offloaded
+# traffic remains visible in their software statistics instead of compiling a
+# dead callback slot with no consumers.
 for patch in \
   999-net-01-netdevice-add-macvlan-device-path-type.patch \
   999-net-02-netdevice-add-dslite-device-path-type.patch \
-  999-net-03-netdevice-add-tnl-device-path-type.patch; do
+  999-net-03-netdevice-add-tnl-device-path-type.patch \
+  999-net-04-netdevice-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch \
+  999-hnat-14-net-vlan-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch \
+  999-hnat-15-ppp-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch; do
   test -f "$PATCH_DIR/$patch"
 done
 
@@ -150,4 +157,4 @@ grep -qx '#define MTK_QDMA_QUEUE_MASK 0x0f' "$HNAT_H"
 grep -q 'N60PRO_HWACCEL_56_HNAT_DEBUGFS_COMPAT' "$HNAT_DEBUGFS"
 ! grep -q 'mtk_eth_dbg.h' "$HNAT_DEBUGFS"
 
-echo "#56 HNAT flow-path prerequisites + netdev path sequence + N60 Pro source/debugfs compat: OK"
+echo "#56 HNAT flow-path prerequisites + netdev/stat ABI + N60 Pro source/debugfs compat: OK"
