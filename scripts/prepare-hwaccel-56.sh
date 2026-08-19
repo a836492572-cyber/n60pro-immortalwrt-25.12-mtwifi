@@ -33,11 +33,14 @@ grep -q 'reg = <0 0x40000000 0 0x80000000>;' "$DTS"
 grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
 grep -q 'mediatek,mtd-eeprom = <&factory 0x0>;' "$DTS"
 
-# 1) Vendor WARP package only. No other donor package/target tree is copied.
+# 1) Linux-6.12 donor WARP package only. Its current 20250408 archive keeps the
+# same 5f71ec driver source revision as the previous 20231229 archive; the SDK
+# update changed firmware/util binaries, not the WARP driver API.
 rm -rf "$WARP_DST"
 mkdir -p "$(dirname "$WARP_DST")"
 rsync -a "$WARP_SRC/" "$WARP_DST/"
 test -f "$WARP_DST/Makefile"
+grep -q '^PKG_SOURCE:=warp_20250408-5f71ec.tar.xz$' "$WARP_DST/Makefile"
 
 # 2) Vendor HNAT driver only.
 rm -rf "$HNAT_DST"
@@ -57,7 +60,9 @@ for patch in \
   install -m0644 "$src" "$dst"
 done
 
-# 4) Package mtkhnat.ko without replacing the official netdevices.mk.
+# 4) Package mtkhnat.ko without replacing the official netdevices.mk. Keep the
+# donor's module-style KCONFIG exactly: do NOT force NET_MEDIATEK_HNAT=y or the
+# expected mtkhnat.ko would become inconsistent with the package FILES entry.
 python3 - "$NETDEVICES" <<'PY'
 from pathlib import Path
 import sys
@@ -68,25 +73,18 @@ end = '# N60PRO_HWACCEL_56_HNAT_END\n'
 block = r'''# N60PRO_HWACCEL_56_HNAT_BEGIN
 define KernelPackage/mediatek_hnat
   SUBMENU:=$(NETWORK_DEVICES_MENU)
-  TITLE:=MediaTek hardware NAT support
+  TITLE:=Mediatek HNAT module
+  DEPENDS:=@TARGET_mediatek +kmod-nf-conntrack
   KCONFIG:= \
-    CONFIG_BRIDGE_NETFILTER=y \
-    CONFIG_NET_MEDIATEK_HNAT=y \
-    CONFIG_NETFILTER_FAMILY_BRIDGE=y \
-    CONFIG_NETFILTER_NETLINK_GLUE_CT=y \
-    CONFIG_NETFILTER_NETLINK_GLUE_CT_TIMEOUT=y \
-    CONFIG_NETFILTER_XT_MARK=y \
-    CONFIG_NF_FLOW_TABLE_INET=y \
-    CONFIG_NF_FLOW_TABLE_IPV4=y \
-    CONFIG_NF_FLOW_TABLE_IPV6=y \
-    CONFIG_NF_NAT=y
-  DEPENDS:=@TARGET_mediatek +kmod-ipt-raw +kmod-ipt-conntrack +kmod-ipt-nat +kmod-nf-conntrack-netlink +kmod-nf-flow +kmod-nf-flow6
-  FILES:=$(LINUX_DIR)/drivers/net/ethernet/mediatek/mtk_hnat/mtkhnat.ko
-  AUTOLOAD:=$(call AutoLoad,30,mtkhnat)
+	CONFIG_BRIDGE_NETFILTER=y \
+	CONFIG_NETFILTER_FAMILY_BRIDGE=y \
+	CONFIG_NET_MEDIATEK_HNAT
+  FILES:= \
+        $(LINUX_DIR)/drivers/net/ethernet/mediatek/mtk_hnat/mtkhnat.ko
 endef
 
 define KernelPackage/mediatek_hnat/description
- MediaTek hardware NAT offload driver used by the proprietary Wi-Fi/WARP path.
+  Kernel modules for MediaTek HW NAT offloading
 endef
 
 $(eval $(call KernelPackage,mediatek_hnat))
@@ -182,6 +180,8 @@ grep -q 'mtk_warp_proxy\.ko' "$MT_WIFI_MAKEFILE"
 grep -Fqx '  AUTOLOAD:=$(call AutoLoad,11,mt_wifi)' "$MT_WIFI_MAKEFILE"
 grep -Fqx 'const DRIVERS = ["mtk_warp_proxy", "mtk_warp", "mt_wifi"];' "$DRIVER_UC"
 grep -q 'N60PRO_HWACCEL_56_HNAT_BEGIN' "$NETDEVICES"
+grep -q '^[[:space:]]*CONFIG_NET_MEDIATEK_HNAT$' "$NETDEVICES"
+! grep -q 'CONFIG_NET_MEDIATEK_HNAT=y' "$NETDEVICES"
 grep -q 'N60PRO_HWACCEL_56_DTS_BEGIN' "$DTS"
 grep -q 'compatible = "mediatek,mtk-hnat_v4";' "$DTS"
 grep -q 'mediatek,mtd-eeprom = <&factory 0x0>;' "$DTS"
