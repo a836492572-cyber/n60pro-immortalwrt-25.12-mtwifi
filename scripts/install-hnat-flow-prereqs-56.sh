@@ -29,6 +29,7 @@ patches=(
   999-net-03-netdevice-add-tnl-device-path-type.patch
   999-net-04-netdevice-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch
   999-tnl-01-mtk-tunnel-offload-support.patch
+  999-zzz-5115-mtk-hnat-fix-mcast-offload-feature-on-NETSYS_V2.patch
 )
 
 for patch in "${patches[@]}"; do
@@ -52,7 +53,8 @@ for patch in \
   999-net-03-netdevice-add-tnl-device-path-type.patch \
   999-net-04-netdevice-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch \
   999-hnat-14-net-vlan-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch \
-  999-hnat-15-ppp-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch; do
+  999-hnat-15-ppp-add-ndo_flow_offload_stats64_add-for-offload-stats-correction.patch \
+  999-zzz-5115-mtk-hnat-fix-mcast-offload-feature-on-NETSYS_V2.patch; do
   test -f "$PATCH_DIR/$patch"
 done
 
@@ -157,4 +159,4 @@ grep -qx '#define MTK_QDMA_QUEUE_MASK 0x0f' "$HNAT_H"
 grep -q 'N60PRO_HWACCEL_56_HNAT_DEBUGFS_COMPAT' "$HNAT_DEBUGFS"
 ! grep -q 'mtk_eth_dbg.h' "$HNAT_DEBUGFS"
 
-echo "#56 HNAT flow-path prerequisites + netdev/stat ABI + N60 Pro source/debugfs compat: OK"
+echo "#56 HNAT flow-path prerequisites + netdev/stat ABI + NETSYS V2 multicast fix + N60 Pro source/debugfs compat: OK"
