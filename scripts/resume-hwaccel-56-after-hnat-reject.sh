@@ -42,11 +42,14 @@ find_one() {
 mkdir -p "$LOGDIR"
 
 test "$(git -C "$BUILDER" rev-parse --abbrev-ref HEAD)" = "agent/hwaccel-56"
-test -z "$(git -C "$BUILDER" status --porcelain)" || {
-  echo "builder worktree is not clean; stop before resume" >&2
+# Only tracked/staged edits can invalidate this resume. The builder intentionally
+# keeps local download/source caches such as .golden-mt-wifi-exact/ and
+# .openclash-pinned/ untracked so they can be reused without another download.
+if ! git -C "$BUILDER" diff --quiet || ! git -C "$BUILDER" diff --cached --quiet; then
+  echo "builder has tracked or staged changes; stop before resume" >&2
   git -C "$BUILDER" status --short >&2
   exit 2
-}
+fi
 test "$(git -C "$SOURCE" rev-parse HEAD)" = "$OFFICIAL_COMMIT"
 test "$(git -C "$DONOR" rev-parse HEAD)" = "$MTK_COMMIT"
 test -f "$SOURCE/.config"
