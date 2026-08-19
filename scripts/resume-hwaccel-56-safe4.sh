@@ -10,5 +10,17 @@ set -euo pipefail
 
 export JOBS="${JOBS:-4}"
 
+BUILDER="$(cd "$(dirname "$0")/.." && pwd)"
+WORKROOT="${N60PRO_WORKROOT:-$HOME/n60pro-hwaccel-56-work}"
+SOURCE="$WORKROOT/source"
+DONOR="$WORKROOT/mtk-donor"
+
 echo "#56 safe local resume: JOBS=$JOBS"
-exec bash "$(cd "$(dirname "$0")" && pwd)/resume-hwaccel-56-after-hnat-reject.sh"
+
+# The latest compile proved the standalone HNAT source needs the donor's narrow
+# virtual flow-path ABI (VLAN/bridge/PPPoE/DSA/macvlan) plus two tiny tunnel-path
+# declarations. Install only those prerequisites before the existing resume
+# reapplies the HNAT Ethernet patch and cleans target/linux.
+bash "$BUILDER/scripts/install-hnat-flow-prereqs-56.sh" "$SOURCE" "$DONOR"
+
+exec bash "$BUILDER/scripts/resume-hwaccel-56-after-hnat-reject.sh"
