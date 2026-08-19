@@ -96,4 +96,46 @@ for macro in ("MTK_FE_INT_ENABLE2", "MTK_FE_INT2_PPE0_FLOW_CHK", "MTK_FE_INT2_PP
         raise SystemExit(f"flow-check prerequisite count != 1 after injection: {macro}: {s.count(macro)}")
 
 p.write_text(s)
-print("rebase HNAT Ethernet patch #56 for official 25.12.1 + stable flow-check prerequisite: OK")
+
+# The pinned HNAT hook includes donor mtk_eth_reset.h only for the private
+# MTK_FE_RESET_NAT_DONE notifier value. That header is created by the donor's
+# broad internal-SER Ethernet patch, which #56 intentionally does not import.
+# Keep the official 25.12.1 Ethernet/reset baseline untouched and localize only
+# this one event ID inside the standalone vendor HNAT hook.
+hnat_hook = (
+    p.parent.parent
+    / "files-6.12"
+    / "drivers/net/ethernet/mediatek/mtk_hnat/hnat_nf_hook.c"
+)
+if not hnat_hook.is_file():
+    raise SystemExit(f"missing HNAT hook source: {hnat_hook}")
+
+hs = hnat_hook.read_text()
+reset_include = '#include "../mtk_eth_reset.h"\n'
+reset_compat = '''/* N60PRO_HWACCEL_56_RESET_EVENT_COMPAT
+ * Donor mtk_eth_reset.h is intentionally not imported: the HNAT hook needs
+ * only this notifier event ID, while official Ethernet/SER stays untouched.
+ */
+#ifndef MTK_FE_RESET_NAT_DONE
+#define MTK_FE_RESET_NAT_DONE\t(0x4001)
+#endif
+'''
+
+if reset_include in hs:
+    if hs.count(reset_include) != 1:
+        raise SystemExit(f"unexpected mtk_eth_reset.h include count: {hs.count(reset_include)}")
+    if "N60PRO_HWACCEL_56_RESET_EVENT_COMPAT" in hs:
+        raise SystemExit("HNAT reset compat marker already present beside donor include")
+    hs = hs.replace(reset_include, reset_compat, 1)
+elif "N60PRO_HWACCEL_56_RESET_EVENT_COMPAT" not in hs:
+    raise SystemExit("HNAT hook has neither donor reset include nor #56 compat marker")
+
+if '../mtk_eth_reset.h' in hs:
+    raise SystemExit("donor mtk_eth_reset.h dependency survived #56 compatibility edit")
+if hs.count("N60PRO_HWACCEL_56_RESET_EVENT_COMPAT") != 1:
+    raise SystemExit("HNAT reset compat marker count != 1")
+if hs.count("#define MTK_FE_RESET_NAT_DONE") != 1:
+    raise SystemExit("HNAT reset event definition count != 1")
+
+hnat_hook.write_text(hs)
+print("rebase HNAT Ethernet patch #56 for official 25.12.1 + stable flow-check/reset prerequisites: OK")
