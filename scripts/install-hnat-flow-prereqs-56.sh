@@ -10,9 +10,9 @@ HNAT_H="$SOURCE/target/linux/mediatek/files-6.12/drivers/net/ethernet/mediatek/m
 
 # The standalone MediaTek HNAT driver is not self-contained: its virtual-path
 # code relies on the donor's small nf_flow_table/net_device plumbing for VLAN,
-# bridge, PPPoE, DSA and macvlan.  Carry only that coherent flow-path series,
-# plus the two tiny tunnel-path ABI prerequisites that the HNAT source refers
-# to unconditionally.  Do not import the donor Ethernet/DSA/PHY/PPE trees.
+# bridge, PPPoE, DSA and macvlan. Carry only that coherent flow-path series,
+# plus the minimal net_device path-type progression that the donor tunnel/HNAT
+# code expects. Do not import the donor Ethernet/DSA/PHY/PPE trees.
 patches=(
   999-hnat-03-netfilter-nf_flow_table-support-hw-offload-through-v.patch
   999-hnat-04-net-8021q-support-hardware-flow-table-offload.patch
@@ -21,6 +21,8 @@ patches=(
   999-hnat-07-net-dsa-support-hardware-flow-table-offload.patch
   999-hnat-08-net-macvlan-support-hardware-flow-table-offload.patch
   999-hnat-09-mtkhnat-add-support-for-virtual-interface-acceleration.patch
+  999-net-01-netdevice-add-macvlan-device-path-type.patch
+  999-net-02-netdevice-add-dslite-device-path-type.patch
   999-net-03-netdevice-add-tnl-device-path-type.patch
   999-tnl-01-mtk-tunnel-offload-support.patch
 )
@@ -33,6 +35,17 @@ for patch in "${patches[@]}"; do
 done
 
 test -f "$HNAT_H"
+
+# The three net_device path-type patches are a strict donor sequence:
+#   MACVLAN -> DSLITE/6RD -> TNL
+# 999-net-03 is intentionally not rebased in isolation; its context requires
+# the two preceding enum additions. Keep only this narrow ABI progression.
+for patch in \
+  999-net-01-netdevice-add-macvlan-device-path-type.patch \
+  999-net-02-netdevice-add-dslite-device-path-type.patch \
+  999-net-03-netdevice-add-tnl-device-path-type.patch; do
+  test -f "$PATCH_DIR/$patch"
+done
 
 # Two compile-only donor assumptions live in unrelated broad patch families:
 # - MXL862 DSA tag support (not used by N60 Pro)
@@ -102,4 +115,4 @@ grep -q 'N60PRO_HWACCEL_56_HNAT_SOURCE_COMPAT' "$HNAT_H"
 ! grep -q 'DSA_TAG_PROTO_MXL862_8021Q' "$HNAT_H"
 grep -qx '#define MTK_QDMA_QUEUE_MASK 0x0f' "$HNAT_H"
 
-echo "#56 HNAT flow-path prerequisites + N60 Pro source compat: OK"
+echo "#56 HNAT flow-path prerequisites + netdev path sequence + N60 Pro source compat: OK"
