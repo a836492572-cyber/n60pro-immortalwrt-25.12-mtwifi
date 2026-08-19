@@ -132,6 +132,28 @@ echo "Config/DTS gate: PASS"
 make -C "$SOURCE" download -j"$JOBS"
 find "$SOURCE/dl" -type f -size -1024c -delete || true
 
+# A fresh OpenWrt tree cannot compile target/linux directly: host tools and the
+# cross toolchain must exist first. The previous #56 gate reached target/linux
+# with staging_dir/host/bin/m4 unusable and no aarch64-openwrt-linux-musl-gcc.
+# Bootstrap them once, then all later module/kernel stages reuse this state.
+run_stage 00-tools tools/install
+run_stage 00-toolchain toolchain/install
+
+test -x "$SOURCE/staging_dir/host/bin/m4" || {
+  echo "host m4 missing after tools/install" >&2
+  exit 1
+}
+"$SOURCE/staging_dir/host/bin/m4" --version >/dev/null
+
+TOOLCHAIN_GCC="$(find "$SOURCE/staging_dir" -path '*/bin/aarch64-openwrt-linux-musl-gcc' -print -quit 2>/dev/null || true)"
+test -n "$TOOLCHAIN_GCC" && test -x "$TOOLCHAIN_GCC" || {
+  echo "aarch64-openwrt-linux-musl-gcc missing after toolchain/install" >&2
+  exit 1
+}
+"$TOOLCHAIN_GCC" --version >/dev/null
+
+echo "Host tools/toolchain gate: PASS"
+
 # Gate 1: Linux + minimal HNAT hooks. This catches patch/DTS/Kconfig failures
 # before building proprietary Wi-Fi.
 run_stage 01-target-linux target/linux/compile
