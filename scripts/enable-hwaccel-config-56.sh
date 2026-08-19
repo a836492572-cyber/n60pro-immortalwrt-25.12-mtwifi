@@ -5,9 +5,11 @@ SOURCE="${1:?usage: enable-hwaccel-config-56.sh <prepared-source> <builder-root>
 BUILDER="${2:?usage: enable-hwaccel-config-56.sh <prepared-source> <builder-root>}"
 EXTRA="$BUILDER/config/n60pro-hwaccel-56.config"
 CONFIG="$SOURCE/.config"
+MT_WIFI_MAKEFILE="$SOURCE/package/mtk/drivers/mt_wifi/Makefile"
 
 test -f "$CONFIG"
 test -f "$EXTRA"
+test -f "$MT_WIFI_MAKEFILE"
 test -d "$SOURCE/package/mtk/drivers/warp"
 test -d "$SOURCE/target/linux/mediatek/files-6.12/drivers/net/ethernet/mediatek/mtk_hnat"
 grep -q 'N60PRO_HWACCEL_56_HNAT_BEGIN' "$SOURCE/package/kernel/linux/modules/netdevices.mk"
@@ -42,6 +44,25 @@ for line in lines:
 cfg.write_text('\n'.join(out).rstrip() + '\n\n' + extra.read_text().strip() + '\n')
 PY
 
+# #55 proved the early mt_wifi load order. Keep mt_wifi at 11, let kmod-warp
+# load at its vendor-defined 60, then load mtk_warp_proxy at 61 to connect the
+# already-running Wi-Fi driver to WARP without disturbing the proven boot gate.
+python3 - "$MT_WIFI_MAKEFILE" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+old = '  AUTOLOAD:=$(call AutoLoad,11,mt_wifi)\n'
+new = '  AUTOLOAD:=$(call AutoLoad,11,mt_wifi) $(call AutoLoad,61,mtk_warp_proxy)\n'
+if old in s:
+    if s.count(old) != 1:
+        raise SystemExit(f'mt_wifi AutoLoad old anchor count != 1: {s.count(old)}')
+    s = s.replace(old, new, 1)
+elif new not in s:
+    raise SystemExit('mt_wifi AutoLoad is neither #55 nor #56 expected form')
+p.write_text(s)
+PY
+
 make -C "$SOURCE" defconfig
 
 # Package/config gates. WED is already part of the official filogic kernel base;
@@ -68,5 +89,6 @@ grep -qx '# CONFIG_MTK_MT7986_NEW_FW is not set' "$CONFIG"
 # The official 6.12 filogic baseline already carries WED; never disable it to
 # make HNAT compile.
 grep -qx 'CONFIG_NET_MEDIATEK_SOC_WED=y' "$SOURCE/target/linux/mediatek/filogic/config-6.12"
+grep -Fqx '  AUTOLOAD:=$(call AutoLoad,11,mt_wifi) $(call AutoLoad,61,mtk_warp_proxy)' "$MT_WIFI_MAKEFILE"
 
 echo 'enable hardware acceleration config #56: OK'
