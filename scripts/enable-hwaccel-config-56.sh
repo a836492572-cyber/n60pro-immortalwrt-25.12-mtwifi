@@ -6,10 +6,12 @@ BUILDER="${2:?usage: enable-hwaccel-config-56.sh <prepared-source> <builder-root
 EXTRA="$BUILDER/config/n60pro-hwaccel-56.config"
 CONFIG="$SOURCE/.config"
 MT_WIFI_MAKEFILE="$SOURCE/package/mtk/drivers/mt_wifi/Makefile"
+KERNEL_CFG="$SOURCE/target/linux/mediatek/filogic/config-6.12"
 
 test -f "$CONFIG"
 test -f "$EXTRA"
 test -f "$MT_WIFI_MAKEFILE"
+test -f "$KERNEL_CFG"
 test -d "$SOURCE/package/mtk/drivers/warp"
 test -d "$SOURCE/target/linux/mediatek/files-6.12/drivers/net/ethernet/mediatek/mtk_hnat"
 grep -q 'N60PRO_HWACCEL_56_HNAT_BEGIN' "$SOURCE/package/kernel/linux/modules/netdevices.mk"
@@ -42,6 +44,27 @@ for line in lines:
         continue
     out.append(line)
 cfg.write_text('\n'.join(out).rstrip() + '\n\n' + extra.read_text().strip() + '\n')
+PY
+
+# The donor HNAT Ethernet patch introduces NETSYS generation Kconfig symbols.
+# MT7986 is NETSYS V2, and the donor's own filogic/config-6.12 pins exactly
+# V2=y / V3=n. Without these lines Linux syncconfig stops on a NEW prompt
+# before auto.conf can be generated.
+python3 - "$KERNEL_CFG" <<'PY'
+from pathlib import Path
+import re, sys
+p = Path(sys.argv[1])
+lines = p.read_text().splitlines()
+syms = ('MEDIATEK_NETSYS_V2', 'MEDIATEK_NETSYS_V3')
+out = [
+    line for line in lines
+    if not any(re.match(rf'^(?:# )?CONFIG_{sym}(?:=| is not set$)', line) for sym in syms)
+]
+out += [
+    'CONFIG_MEDIATEK_NETSYS_V2=y',
+    '# CONFIG_MEDIATEK_NETSYS_V3 is not set',
+]
+p.write_text('\n'.join(out).rstrip() + '\n')
 PY
 
 # #55 proved the early mt_wifi load order. Keep mt_wifi at 11, let kmod-warp
@@ -87,8 +110,11 @@ grep -qx '# CONFIG_MTK_MT7986_NEW_FW is not set' "$CONFIG"
 ! grep -Eq '^CONFIG_PACKAGE_mt7986-wo-firmware=(y|m)$' "$CONFIG"
 
 # The official 6.12 filogic baseline already carries WED; never disable it to
-# make HNAT compile.
-grep -qx 'CONFIG_NET_MEDIATEK_SOC_WED=y' "$SOURCE/target/linux/mediatek/filogic/config-6.12"
+# make HNAT compile. The #56 donor HNAT overlay additionally requires the
+# MT7986 NETSYS generation to be explicit so kernel syncconfig stays noninteractive.
+grep -qx 'CONFIG_NET_MEDIATEK_SOC_WED=y' "$KERNEL_CFG"
+grep -qx 'CONFIG_MEDIATEK_NETSYS_V2=y' "$KERNEL_CFG"
+grep -qx '# CONFIG_MEDIATEK_NETSYS_V3 is not set' "$KERNEL_CFG"
 grep -Fqx '  AUTOLOAD:=$(call AutoLoad,11,mt_wifi) $(call AutoLoad,61,mtk_warp_proxy)' "$MT_WIFI_MAKEFILE"
 
 echo 'enable hardware acceleration config #56: OK'
