@@ -79,6 +79,8 @@ grep -q '25.12.1' "$SOURCE/include/version.mk"
 bash "$BUILDER/scripts/prepare.sh" "$SOURCE" "$DONOR" "$BUILDER"
 bash "$BUILDER/scripts/fix-wifi-utility-module.sh" "$SOURCE"
 bash "$BUILDER/scripts/prepare-hwaccel-56.sh" "$SOURCE" "$DONOR" "$BUILDER"
+python3 "$BUILDER/scripts/rebase-hnat-eth-patch-56.py" \
+  "$SOURCE/target/linux/mediatek/patches-6.12/999-eth-91-mtk_eth_soc-add-mtkhnat-driver-support.patch"
 
 # Keep the same final app/feed inputs as #55 so the only functional delta under
 # this gate is the hardware-acceleration chain.
