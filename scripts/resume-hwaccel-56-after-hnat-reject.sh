@@ -13,6 +13,7 @@ MTK_COMMIT="eb724bb94de346f36b35bdb0f7de31b529bbc885"
 PATCH_NAME="999-eth-91-mtk_eth_soc-add-mtkhnat-driver-support.patch"
 PATCH="$SOURCE/target/linux/mediatek/patches-6.12/$PATCH_NAME"
 DONOR_PATCH="$DONOR/target/linux/mediatek/patches-6.12/$PATCH_NAME"
+KERNEL_CFG="$SOURCE/target/linux/mediatek/filogic/config-6.12"
 
 run_stage() {
   local name="$1" target="$2"
@@ -54,6 +55,7 @@ test "$(git -C "$SOURCE" rev-parse HEAD)" = "$OFFICIAL_COMMIT"
 test "$(git -C "$DONOR" rev-parse HEAD)" = "$MTK_COMMIT"
 test -f "$SOURCE/.config"
 test -f "$DONOR_PATCH"
+test -f "$KERNEL_CFG"
 test -f "$BUILDER/scripts/rebase-hnat-eth-patch-56.py"
 
 grep -qx 'CONFIG_PACKAGE_kmod-mediatek_hnat=y' "$SOURCE/.config"
@@ -63,6 +65,29 @@ grep -Eq '^CONFIG_MTK_WHNAT_SUPPORT=(m|y)$' "$SOURCE/.config"
 grep -qx 'CONFIG_MTK_WARP_V2=y' "$SOURCE/.config"
 grep -qx 'CONFIG_MTK_RT_FIRST_IF_RF_OFFSET=0x0' "$SOURCE/.config"
 grep -qx '# CONFIG_MTK_MT7986_NEW_FW is not set' "$SOURCE/.config"
+
+# The donor HNAT patch adds NETSYS generation prompts to the kernel Kconfig.
+# MT7986 is NETSYS V2, matching the pinned donor filogic/config-6.12. Pin both
+# generation symbols here before target/linux/clean so syncconfig cannot stop
+# on a NEW prompt and leave include/config/auto.conf missing.
+python3 - "$KERNEL_CFG" <<'PY'
+from pathlib import Path
+import re, sys
+p = Path(sys.argv[1])
+lines = p.read_text().splitlines()
+syms = ('MEDIATEK_NETSYS_V2', 'MEDIATEK_NETSYS_V3')
+out = [
+    line for line in lines
+    if not any(re.match(rf'^(?:# )?CONFIG_{sym}(?:=| is not set$)', line) for sym in syms)
+]
+out += [
+    'CONFIG_MEDIATEK_NETSYS_V2=y',
+    '# CONFIG_MEDIATEK_NETSYS_V3 is not set',
+]
+p.write_text('\n'.join(out).rstrip() + '\n')
+PY
+grep -qx 'CONFIG_MEDIATEK_NETSYS_V2=y' "$KERNEL_CFG"
+grep -qx '# CONFIG_MEDIATEK_NETSYS_V3 is not set' "$KERNEL_CFG"
 
 # Restore only the failed donor Ethernet HNAT patch, then rebase its three
 # incompatible PPE ownership hunks to the official 25.12.1 / Linux 6.12 layout.
@@ -102,6 +127,8 @@ KCONF="$(find "$SOURCE/build_dir" -type f -path '*/linux-mediatek_filogic/linux-
 test -n "$KCONF" || { echo "kernel .config not found" >&2; exit 1; }
 grep -Eq '^CONFIG_NET_MEDIATEK_HNAT=m$' "$KCONF"
 grep -Eq '^CONFIG_NET_MEDIATEK_SOC_WED=y$' "$KCONF"
+grep -Eq '^CONFIG_MEDIATEK_NETSYS_V2=y$' "$KCONF"
+grep -Eq '^# CONFIG_MEDIATEK_NETSYS_V3 is not set$' "$KCONF"
 find_one mtkhnat.ko 'HNAT module'
 
 run_stage 02-warp package/mtk/drivers/warp/compile
