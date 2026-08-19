@@ -70,9 +70,31 @@ grep -qx '# CONFIG_MTK_MT7986_NEW_FW is not set' "$SOURCE/.config"
 install -m0644 "$DONOR_PATCH" "$PATCH"
 python3 "$BUILDER/scripts/rebase-hnat-eth-patch-56.py" "$PATCH"
 
-# The previous stage stopped while kernel patches were being applied. Clean only
-# target/linux so the corrected patch stack is reapplied; preserve host tools,
-# feeds, downloads, staging/toolchain and the prepared #56 source/config.
+# The first local run proved that this fresh workroot had never completed the
+# OpenWrt host-tool/cross-toolchain bootstrap. target/linux cannot be compiled
+# until staging_dir/host/bin/m4 and aarch64-openwrt-linux-musl-gcc are usable.
+# Build those prerequisites now and keep them for every later resume.
+run_stage 00-tools tools/install
+run_stage 00-toolchain toolchain/install
+
+test -x "$SOURCE/staging_dir/host/bin/m4" || {
+  echo "host m4 missing after tools/install" >&2
+  exit 1
+}
+"$SOURCE/staging_dir/host/bin/m4" --version >/dev/null
+
+TOOLCHAIN_GCC="$(find "$SOURCE/staging_dir" -path '*/bin/aarch64-openwrt-linux-musl-gcc' -print -quit 2>/dev/null || true)"
+test -n "$TOOLCHAIN_GCC" && test -x "$TOOLCHAIN_GCC" || {
+  echo "aarch64-openwrt-linux-musl-gcc missing after toolchain/install" >&2
+  exit 1
+}
+"$TOOLCHAIN_GCC" --version >/dev/null
+
+echo "Host tools/toolchain gate: PASS"
+
+# The previous stage stopped while kernel configuration/build was starting.
+# Clean only target/linux so the corrected HNAT patch stack is reapplied while
+# preserving downloads, feeds, host tools, cross toolchain and staging state.
 make -C "$SOURCE" target/linux/clean
 run_stage 01-target-linux target/linux/compile
 
@@ -100,7 +122,7 @@ grep -Fqx '  AUTOLOAD:=$(call AutoLoad,11,mt_wifi) $(call AutoLoad,61,mtk_warp_p
 echo
 echo '============================================================'
 echo '#56 HARDWARE-ACCELERATION COMPILE GATE: PASS'
-echo 'Resume path reused the existing local toolchain/download/staging state.'
+echo 'Resume path reused the existing local downloads/feeds/staging state.'
 echo 'No sysupgrade image was built and nothing should be flashed yet.'
 echo "Logs: $LOGDIR"
 echo '============================================================'
