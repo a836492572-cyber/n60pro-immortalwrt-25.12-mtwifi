@@ -68,6 +68,33 @@ s = replace_span(s, OPEN, STOP, open_hunk)
 s = replace_span(s, STOP, PROBE, stop_hunk)
 s = replace_span(s, ERR, FOOTER, err_hunk)
 
+# The standalone donor mtk_hnat/hnat.c also uses the NETSYS-v2 PPE flow-check
+# interrupt bits. In the donor tree these three definitions arrive in the
+# separate 999-hnat-02 patch. #56 deliberately avoids importing a broad donor
+# patch series, so carry only that exact header-only prerequisite here.
+# This is intentionally no Ethernet behaviour change: it only exposes the
+# register offset/bit definitions consumed by hnat_hw_init().
+flow_check_header_hunk = r'''diff --git a/drivers/net/ethernet/mediatek/mtk_eth_soc.h b/drivers/net/ethernet/mediatek/mtk_eth_soc.h
+index cc4fb3b..086aa28 100644
+--- a/drivers/net/ethernet/mediatek/mtk_eth_soc.h
++++ b/drivers/net/ethernet/mediatek/mtk_eth_soc.h
+@@ -114,6 +114,9 @@
+ 
+ /* Frame Engine Interrupt Status 2 Register */
+ #define MTK_FE_INT_STATUS2	0x28
++#define MTK_FE_INT_ENABLE2	0x2C
++#define MTK_FE_INT2_PPE0_FLOW_CHK	BIT(28)
++#define MTK_FE_INT2_PPE1_FLOW_CHK	BIT(29)
+ 
+ /* Frame Engine LRO Auto-Learn Table Information */
+ #define MTK_FE_ALT_CF8		0x300
+'''
+
+for macro in ("MTK_FE_INT_ENABLE2", "MTK_FE_INT2_PPE0_FLOW_CHK", "MTK_FE_INT2_PPE1_FLOW_CHK"):
+    if macro in s:
+        raise SystemExit(f"flow-check prerequisite already present before injection: {macro}")
+s = s.replace(FOOTER, flow_check_header_hunk + FOOTER, 1)
+
 # Guard against accidentally deleting the already-clean probe ownership guard.
 if s.count("#if !defined(CONFIG_NET_MEDIATEK_HNAT) && !defined(CONFIG_NET_MEDIATEK_HNAT_MODULE)") < 5:
     raise SystemExit("HNAT guard count unexpectedly low after rebase")
@@ -75,6 +102,9 @@ if "mtk_ppe_roaming_start" in s or "mtk_ppe_roaming_stop" in s:
     raise SystemExit("donor-only PPE roaming context survived HNAT patch rebase")
 if PROBE not in s:
     raise SystemExit("probe PPE-init guard hunk was lost")
+for macro in ("MTK_FE_INT_ENABLE2", "MTK_FE_INT2_PPE0_FLOW_CHK", "MTK_FE_INT2_PPE1_FLOW_CHK"):
+    if s.count(macro) != 1:
+        raise SystemExit(f"flow-check prerequisite count != 1 after injection: {macro}: {s.count(macro)}")
 
 p.write_text(s)
-print("rebase HNAT Ethernet patch #56 for official 25.12.1: OK")
+print("rebase HNAT Ethernet patch #56 for official 25.12.1 + flow-check prerequisite: OK")
