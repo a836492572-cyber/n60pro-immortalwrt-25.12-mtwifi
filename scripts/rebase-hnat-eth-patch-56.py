@@ -18,12 +18,8 @@ for marker in (OPEN, STOP, PROBE, ERR, FOOTER):
     if s.count(marker) != 1:
         raise SystemExit(f"unexpected donor patch shape for marker {marker!r}: {s.count(marker)}")
 
-# The pinned donor patch is written for a newer vendor mtk_eth_soc.c layout.
-# Official ImmortalWrt 25.12.1 / Linux 6.12 has the same PPE ownership points,
-# but no donor PPE-roaming calls beside open/stop and a different error unwind.
-# Re-anchor only those three failing regions. Keep the donor RX metadata hooks,
-# Kconfig/Makefile changes and the probe PPE-init guard unchanged.
-
+# The pinned donor patch targets a newer vendor mtk_eth_soc.c layout. Re-anchor
+# only the incompatible PPE ownership regions to official 25.12.1 / Linux 6.12.
 def replace_span(text: str, start_marker: str, end_marker: str, replacement: str) -> str:
     start = text.index(start_marker)
     end = text.index(end_marker, start)
@@ -68,26 +64,20 @@ s = replace_span(s, OPEN, STOP, open_hunk)
 s = replace_span(s, STOP, PROBE, stop_hunk)
 s = replace_span(s, ERR, FOOTER, err_hunk)
 
-# The standalone donor mtk_hnat/hnat.c also uses the NETSYS-v2 PPE flow-check
-# interrupt bits. In the donor tree these three definitions arrive in the
-# separate 999-hnat-02 patch. #56 deliberately avoids importing a broad donor
-# patch series, so carry only that exact header-only prerequisite here.
-# This is intentionally no Ethernet behaviour change: it only exposes the
-# register offset/bit definitions consumed by hnat_hw_init().
+# Standalone mtk_hnat/hnat.c consumes these NETSYS-v2 PPE flow-check bits. The
+# donor tree provides them in 999-hnat-02. Carry only the exact definitions,
+# without importing the donor Ethernet patch series. Do not anchor this hunk to
+# the donor FE_INT_STATUS2 neighbourhood: official 25.12.1's earlier patch stack
+# changes that region. The include guard is stable and the macro definitions are
+# position-independent.
 flow_check_header_hunk = r'''diff --git a/drivers/net/ethernet/mediatek/mtk_eth_soc.h b/drivers/net/ethernet/mediatek/mtk_eth_soc.h
-index cc4fb3b..086aa28 100644
 --- a/drivers/net/ethernet/mediatek/mtk_eth_soc.h
 +++ b/drivers/net/ethernet/mediatek/mtk_eth_soc.h
-@@ -114,6 +114,9 @@
- 
- /* Frame Engine Interrupt Status 2 Register */
- #define MTK_FE_INT_STATUS2	0x28
+@@ -10,1 +10,4 @@
+ #define MTK_ETH_H
 +#define MTK_FE_INT_ENABLE2	0x2C
 +#define MTK_FE_INT2_PPE0_FLOW_CHK	BIT(28)
 +#define MTK_FE_INT2_PPE1_FLOW_CHK	BIT(29)
- 
- /* Frame Engine LRO Auto-Learn Table Information */
- #define MTK_FE_ALT_CF8		0x300
 '''
 
 for macro in ("MTK_FE_INT_ENABLE2", "MTK_FE_INT2_PPE0_FLOW_CHK", "MTK_FE_INT2_PPE1_FLOW_CHK"):
@@ -95,7 +85,6 @@ for macro in ("MTK_FE_INT_ENABLE2", "MTK_FE_INT2_PPE0_FLOW_CHK", "MTK_FE_INT2_PP
         raise SystemExit(f"flow-check prerequisite already present before injection: {macro}")
 s = s.replace(FOOTER, flow_check_header_hunk + FOOTER, 1)
 
-# Guard against accidentally deleting the already-clean probe ownership guard.
 if s.count("#if !defined(CONFIG_NET_MEDIATEK_HNAT) && !defined(CONFIG_NET_MEDIATEK_HNAT_MODULE)") < 5:
     raise SystemExit("HNAT guard count unexpectedly low after rebase")
 if "mtk_ppe_roaming_start" in s or "mtk_ppe_roaming_stop" in s:
@@ -107,4 +96,4 @@ for macro in ("MTK_FE_INT_ENABLE2", "MTK_FE_INT2_PPE0_FLOW_CHK", "MTK_FE_INT2_PP
         raise SystemExit(f"flow-check prerequisite count != 1 after injection: {macro}: {s.count(macro)}")
 
 p.write_text(s)
-print("rebase HNAT Ethernet patch #56 for official 25.12.1 + flow-check prerequisite: OK")
+print("rebase HNAT Ethernet patch #56 for official 25.12.1 + stable flow-check prerequisite: OK")
