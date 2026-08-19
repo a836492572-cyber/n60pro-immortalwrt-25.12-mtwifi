@@ -7,7 +7,7 @@ BUILDER="${3:?usage: prepare-hwaccel-56.sh <official-prepared-source> <6.12-dono
 
 # #56 is deliberately a narrow overlay on top of the proven #55 tree.
 # It MUST NOT replace target/linux/mediatek, Ethernet, DSA, PHY, switch or PPE.
-# Restore only the vendor HNAT/WARP pieces and their minimum 6.12 hooks.
+# Restore only the vendor HNAT/WARP pieces and their minimum Linux 6.12 hooks.
 
 MT_WIFI="$SOURCE/package/mtk/drivers/mt_wifi"
 MT_WIFI_MAKEFILE="$MT_WIFI/Makefile"
@@ -137,7 +137,10 @@ if s.count(old) != 1:
 p.write_text(s.replace(old, new, 1))
 PY
 
-# 6) N60-Pro-local HNAT platform node. Do not modify shared mt7986a.dtsi.
+# 6) Board-local DTS bridge for vendor HNAT/WARP. The standard N60 Pro
+# Ethernet/DSA/PHY definitions are not replaced. Existing upstream WED/WO
+# nodes retain their official compatible strings as fallbacks, while the
+# vendor strings/resources required by WARP are added only on this board.
 python3 - "$DTS" <<'PY'
 from pathlib import Path
 import sys
@@ -145,25 +148,104 @@ p = Path(sys.argv[1])
 s = p.read_text()
 marker = 'N60PRO_HWACCEL_56_DTS_BEGIN'
 if marker in s:
-    raise SystemExit('HNAT DTS marker already present; refusing ambiguous reapply')
+    raise SystemExit('hardware-accel DTS marker already present; refusing ambiguous reapply')
 s += r'''
 
 /* N60PRO_HWACCEL_56_DTS_BEGIN
- * Board-local vendor HNAT node. Official Ethernet/DSA/PHY nodes stay untouched.
+ * Board-local vendor HNAT/WARP bridge. Keep the official N60 Pro Ethernet,
+ * DSA, PHY and shared mt7986a platform baseline intact.
  */
 / {
-	hnat: hnat@15100000 {
+	hnat: hnat@15000000 {
 		compatible = "mediatek,mtk-hnat_v4";
 		reg = <0 0x15100000 0 0x80000>;
 		resets = <&ethsys 0>;
 		reset-names = "mtketh";
-		mtketh-ppd = "eth0";
+		mtketh-soc = <&eth>;
 		mtketh-wan = "eth1";
 		mtketh-lan = "lan";
 		mtketh-max-gmac = <2>;
-		mtketh-soc = "mt7986";
 		status = "okay";
 	};
+};
+
+/* WARP 5f71ec expects a combined WDMA node and indexes resource 0/1. */
+&{/soc} {
+	warp_wdma: wdma@15104800 {
+		compatible = "mediatek,wed-wdma";
+		reg = <0 0x15104800 0 0x400>,
+		      <0 0x15104c00 0 0x400>;
+	};
+};
+
+/* Keep official WED compatibles as fallbacks while exposing the proprietary
+ * names and two-resource/two-IRQ layout required by mtk_warp. */
+&wed0 {
+	compatible = "mediatek,wed", "mediatek,mt7986-wed", "syscon";
+	wed_num = <2>;
+	pci_slot_map = <0>, <1>;
+	reg = <0 0x15010000 0 0x1000>,
+	      <0 0x15011000 0 0x1000>;
+	interrupts = <GIC_SPI 205 IRQ_TYPE_LEVEL_HIGH>,
+	             <GIC_SPI 206 IRQ_TYPE_LEVEL_HIGH>;
+};
+
+&wed1 {
+	compatible = "mediatek,wed2", "mediatek,mt7986-wed", "syscon";
+	reg = <0 0x15010000 0 0x1000>,
+	      <0 0x15011000 0 0x1000>;
+	interrupts = <GIC_SPI 205 IRQ_TYPE_LEVEL_HIGH>,
+	             <GIC_SPI 206 IRQ_TYPE_LEVEL_HIGH>;
+};
+
+/* WARP searches this exact compatible for the PCIe interrupt bridge. */
+&wed_pcie {
+	compatible = "mediatek,wed_pcie", "mediatek,mt7986-wed-pcie", "syscon";
+};
+
+/* Reuse the upstream reserved-memory/WO nodes, adding only the vendor aliases
+ * WARP looks up with of_find_compatible_node(). */
+&wo_emi0 {
+	compatible = "mediatek,wocpu0_emi";
+	shared = <0>;
+};
+
+&wo_emi1 {
+	compatible = "mediatek,wocpu1_emi";
+	shared = <0>;
+};
+
+&wo_data {
+	compatible = "mediatek,wocpu_data";
+	shared = <1>;
+};
+
+&wo_ilm0 {
+	compatible = "mediatek,wocpu0_ilm", "mediatek,mt7986-wo-ilm", "syscon";
+};
+
+&wo_ilm1 {
+	compatible = "mediatek,wocpu1_ilm", "mediatek,mt7986-wo-ilm", "syscon";
+};
+
+/* WARP indexes DLM resource 0/1 from one compatible node. */
+&wo_dlm0 {
+	compatible = "mediatek,wocpu_dlm", "mediatek,mt7986-wo-dlm", "syscon";
+	reg = <0 0x151e8000 0 0x2000>,
+	      <0 0x151f8000 0 0x2000>;
+};
+
+&wo_cpuboot {
+	compatible = "mediatek,wocpu_boot", "mediatek,mt7986-wo-cpuboot", "syscon";
+};
+
+/* WARP CCIF likewise indexes resource/IRQ 0/1 from a single node. */
+&wo_ccif0 {
+	compatible = "mediatek,ap2woccif", "mediatek,mt7986-wo-ccif", "syscon";
+	reg = <0 0x151a5000 0 0x1000>,
+	      <0 0x151ad000 0 0x1000>;
+	interrupts = <GIC_SPI 211 IRQ_TYPE_LEVEL_HIGH>,
+	             <GIC_SPI 212 IRQ_TYPE_LEVEL_HIGH>;
 };
 /* N60PRO_HWACCEL_56_DTS_END */
 '''
@@ -184,6 +266,18 @@ grep -q '^[[:space:]]*CONFIG_NET_MEDIATEK_HNAT$' "$NETDEVICES"
 ! grep -q 'CONFIG_NET_MEDIATEK_HNAT=y' "$NETDEVICES"
 grep -q 'N60PRO_HWACCEL_56_DTS_BEGIN' "$DTS"
 grep -q 'compatible = "mediatek,mtk-hnat_v4";' "$DTS"
+grep -q 'mtketh-soc = <&eth>;' "$DTS"
+! grep -q 'mtketh-soc = "mt7986"' "$DTS"
+grep -q 'compatible = "mediatek,wed", "mediatek,mt7986-wed", "syscon";' "$DTS"
+grep -q 'compatible = "mediatek,wed2", "mediatek,mt7986-wed", "syscon";' "$DTS"
+grep -q 'wed_num = <2>;' "$DTS"
+grep -q 'pci_slot_map = <0>, <1>;' "$DTS"
+grep -q 'compatible = "mediatek,wed-wdma";' "$DTS"
+grep -q 'compatible = "mediatek,ap2woccif", "mediatek,mt7986-wo-ccif", "syscon";' "$DTS"
+grep -q 'compatible = "mediatek,wocpu0_emi";' "$DTS"
+grep -q 'compatible = "mediatek,wocpu1_emi";' "$DTS"
+grep -q 'compatible = "mediatek,wocpu_data";' "$DTS"
+grep -q 'compatible = "mediatek,wocpu_dlm", "mediatek,mt7986-wo-dlm", "syscon";' "$DTS"
 grep -q 'mediatek,mtd-eeprom = <&factory 0x0>;' "$DTS"
 grep -q 'reg = <0 0x40000000 0 0x80000000>;' "$DTS"
 grep -q 'reg = <0x0580000 0x1fa80000>;' "$DTS"
